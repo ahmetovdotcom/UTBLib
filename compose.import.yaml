@@ -1,0 +1,16 @@
+services:
+  importer:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.import
+    env_file: .env.marcsql
+    environment:
+      ADMIN_KEY: ${ADMIN_KEY:?Set ADMIN_KEY in .env}
+      IMPORT_API_URL: http://api:8000
+      IMPORT_TYPE_MAP: '{"a/m": 1, "a/a": 2, "a/c": 6, "a/s": 7}'
+    volumes:
+      - import_reports:/import
+    profiles: [import]
+    command: ["python", "-m", "app.import_marcsql"]
+volumes:
+  import_reports:

@@ -1,0 +1,9 @@
+<script setup lang="ts">
+import {ref} from 'vue';
+const props=defineProps<{api:(path:string,method?:string,body?:unknown)=>Promise<any>}>();
+const emit=defineEmits<{changed:[]}>();
+const dialog=ref<HTMLDialogElement>(),current=ref(''),password=ref(''),confirm=ref(''),busy=ref(false),error=ref('');
+function open(){current.value='';password.value='';confirm.value='';error.value='';dialog.value?.showModal();}
+async function save(){if(password.value!==confirm.value){error.value='Новые пароли не совпадают';return;}busy.value=true;error.value='';try{await props.api('/auth/password','POST',{current_password:current.value,new_password:password.value});dialog.value?.close();emit('changed');}catch(e){error.value=e instanceof Error?e.message:String(e);}finally{busy.value=false;}}
+</script>
+<template><button @click="open">Сменить пароль</button><dialog ref="dialog" class="modal card" aria-labelledby="password-title" @cancel="busy&&$event.preventDefault()"><form @submit.prevent="save"><h2 id="password-title">Смена пароля</h2><fieldset :disabled="busy" class="plain-fieldset"><label>Текущий пароль<input v-model="current" type="password" autocomplete="current-password" required maxlength="256"></label><label>Новый пароль<input v-model="password" type="password" autocomplete="new-password" required minlength="8" maxlength="256"></label><label>Повторите новый пароль<input v-model="confirm" type="password" autocomplete="new-password" required minlength="8" maxlength="256"></label></fieldset><p>После смены пароля все ваши сеансы будут завершены.</p><p v-if="error" role="alert">{{error}}</p><div class="modal-actions"><button type="button" :disabled="busy" @click="dialog?.close()">Отмена</button><button class="primary" :disabled="busy">Изменить пароль</button></div></form></dialog></template>

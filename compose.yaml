@@ -1,0 +1,43 @@
+name: standalone-library
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: catalog
+      POSTGRES_USER: catalog
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U catalog -d catalog"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://catalog:${POSTGRES_PASSWORD}@db/catalog
+      ADMIN_KEY: ${ADMIN_KEY:?Set ADMIN_KEY in .env}
+      ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      MARC_PATH: /data/marc21.json
+      GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
+    volumes:
+      - ./data:/data:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  web:
+    build: ./frontend
+    ports:
+      - "127.0.0.1:8096:80"
+    depends_on:
+      api:
+        condition: service_healthy
+volumes:
+  postgres_data:

@@ -1,0 +1,5 @@
+FROM python:3.13-slim
+WORKDIR /app
+RUN pip install --no-cache-dir "pymssql>=2.3,<3" httpx==0.28.1
+COPY app ./app
+CMD ["python", "-m", "app.import_marcsql"]

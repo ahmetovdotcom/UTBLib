@@ -1,0 +1,64 @@
+name: kaztbu-catalog-v2
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: catalog
+      POSTGRES_USER: catalog
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run deploy/init.sh}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U catalog -d catalog']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+  api:
+    image: kaztbu-catalog-api:${APP_VERSION:-2026-10-21}
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://catalog:${POSTGRES_PASSWORD}@db/catalog
+      ADMIN_KEY: ${ADMIN_KEY:?Run deploy/init.sh}
+      ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD:?Run deploy/init.sh}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      MARC_PATH: /data/marc21.json
+      GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
+    volumes:
+      - ./data:/data:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+  web:
+    image: kaztbu-catalog-web:${APP_VERSION:-2026-10-21}
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - '${WEB_BIND:-127.0.0.1}:${WEB_PORT:-8097}:80'
+    depends_on:
+      api:
+        condition: service_healthy
+  importer:
+    image: kaztbu-catalog-importer:${APP_VERSION:-2026-10-21}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.import
+    profiles: [import]
+    env_file: .env.marcsql
+    environment:
+      ADMIN_KEY: ${ADMIN_KEY:?Run deploy/init.sh}
+      IMPORT_API_URL: http://api:8000
+      IMPORT_TYPE_MAP: '${IMPORT_TYPE_MAP:-}'
+    volumes:
+      - import_reports:/import
+    command: [python, -m, app.import_marcsql_all, --apply]
+volumes:
+  postgres_data:
+  import_reports:
