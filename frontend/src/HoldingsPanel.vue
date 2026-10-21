@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import CopyForms from './CopyForms.vue';
 import {authStorage} from "./authStorage";
 import {ref,watch,onMounted,nextTick} from 'vue';
 const props=defineProps<{canEdit:boolean,recordId:number,title:string,api:(path:string,method?:string,body?:unknown)=>Promise<any>}>();
@@ -31,6 +32,7 @@ onMounted(()=>window.addEventListener('beforeunload',onUnload));onUnmounted(()=>
 <template>
 <section class="holdings card">
  <div class="page-heading"><div><h2>Экземпляры</h2><p><strong>В действующем фонде: {{active}} · Всего в истории: {{total}}</strong></p></div><button v-if="canEdit" class="primary" :disabled="busy||!!pending" @click="openExisting">＋ Создать экземпляр</button></div>
+ <CopyForms :record-id="recordId" :api="api" />
  <p class="profile-note">Здесь добавляются экземпляры уже имеющегося фонда — без накладной и без создания поступления. Новые партии оформляйте в разделе «Поступления» бокового меню.</p>
  <div v-if="pending&&canEdit" class="pending-note"><strong>Есть незавершённое создание экземпляра.</strong><p>Ответ мог потеряться. Повтор отправит ту же операцию и не создаст дубликат.</p><button :disabled="busy" @click="retry">Проверить и восстановить экземпляр</button></div>
  <p v-if="error" role="alert" class="inline-error">{{error}}</p><p v-if="notice" role="status">{{notice}}</p>
