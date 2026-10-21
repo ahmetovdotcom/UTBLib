@@ -74,7 +74,17 @@ def test_receipt_correction_cancel_and_existing_fund(client):
     assert report(client)['rows'][0]['number']==number
     response=client.post('/api/acquisitions/'+str(a['id'])+'/cancel',json={'request_key':str(uuid4()),'version':2,'reason':'Ошибка'})
     assert response.status_code==200,response.text
-    assert report(client)['totals']['copies']==0 and report(client)['rows'][0]['status']=='cancelled'
+    data=report(client)
+    assert data['totals']['copies']==0 and data['rows']==[]
+    assert data['issue_count']==0 and data['unpriced_count']==0
+    assert client.get('/api/ksu/export?year=2026').status_code==200
+    # Cancellation preserves the allocated number; the next receipt does not reuse it.
+    new=client.post('/api/acquisitions',json=add_body(r['id'],1,'20'))
+    assert new.status_code==200,new.text
+    rows=report(client)['rows']
+    assert len(rows)==1 and rows[0]['acquisition_id']==new.json()['id']
+    assert rows[0]['number']==number+1
+    assert report(client)['totals']['copies']==1
 
 
 def test_unknown_price_is_not_zero_and_empty_document_date_not_invented(client):

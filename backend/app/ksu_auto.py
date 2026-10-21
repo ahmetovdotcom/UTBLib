@@ -78,7 +78,7 @@ def ensure_entry(s,a):
 
 def automatic_report(s,year,columns):
     mapping=rules(s)
-    pairs=list(s.execute(select(KsuEntry,Acquisition).join(Acquisition,Acquisition.id==KsuEntry.acquisition_id).where(KsuEntry.year==year).order_by(KsuEntry.number)))
+    pairs=list(s.execute(select(KsuEntry,Acquisition).join(Acquisition,Acquisition.id==KsuEntry.acquisition_id).where(KsuEntry.year==year,Acquisition.status=='posted').order_by(KsuEntry.number)))
     ids=[a.id for _,a in pairs];by_id={}
     if ids:
         for l,r in s.execute(select(AcquisitionLine,Record).join(Record,Record.id==AcquisitionLine.record_id).where(AcquisitionLine.acquisition_id.in_(ids),AcquisitionLine.quantity>0).order_by(AcquisitionLine.id)):
