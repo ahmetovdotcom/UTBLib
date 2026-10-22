@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {ref,onMounted,nextTick,watch,computed,onBeforeUnmount} from 'vue';
-const props=defineProps<{api:(path:string,method?:string,body?:any)=>Promise<any>,can:(p:string)=>boolean}>();
+const props=defineProps<{api:(path:string,method?:string,body?:any)=>Promise<any>,can:(p:string)=>boolean,initialReaderId?:number|null}>();
+const emit=defineEmits<{readerConsumed:[]}>();
 const modal=ref<HTMLElement|null>(null);let previousFocus:HTMLElement|null=null;
 const newKey=()=>crypto.randomUUID();
 const recent=ref<any[]>([]), late=ref<any[]>([]), searchingReader=ref(false);
@@ -62,7 +63,7 @@ async function submitDialog(){await run(async()=>{const d=dialog.value;const {ty
 async function openDetail(id:number){await run(async()=>{detail.value=await props.api('/circulation/loans/'+id);});}
 async function saveSettings(){await run(async()=>{settings.value=await props.api('/circulation/settings','POST',{...settings.value,request_key:operationKey.value});changed();success.value='Настройки сохранены';options.value=await props.api('/circulation/options');});}
 const policyNames:Record<string,string>={max_loans:'Лимит выдач',scarce_max:'Верхний порог редких экземпляров',standard_max:'Верхний средний порог',scarce_days:'Срок редких книг, дней',standard_days:'Средний срок, дней',abundant_days:'Срок многочисленных книг, дней',manual_days:'Обычное окно ручной даты, дней',renewals_enabled:'Разрешить продление',max_renewals:'Число продлений',renewal_days:'Период продления, дней',block_overdue:'Запрет выдачи при просрочках',block_incidents:'Запрет выдачи при открытых делах',fine_per_day:'Штраф за день просрочки, ₸ (0 — отключён)',presumed_lost_days:'Предполагаемая утрата через дней (0 — отключена)',preparation_days:'Срок подготовки брони, дней',pickup_days:'Срок получения брони, дней',reservation_extensions:'Продлений брони',max_reservations:'Лимит броней'};
-onMounted(()=>run(async()=>{const first=[['overview','circulation.issue'],['return','circulation.return'],['history','circulation.view_any_history'],['history','circulation.view_own_history'],['reservations','reservations.manage'],['fines','fines.manage'],['incidents','incidents.manage'],['settings','circulation.settings'],['mine','loans.view_own']].find(([,right])=>props.can(right));tab.value=first?.[0]||'overview';if(tab.value!=='mine')options.value=await props.api('/circulation/options');await load();}));
+onMounted(()=>run(async()=>{const first=[['overview','circulation.issue'],['return','circulation.return'],['history','circulation.view_any_history'],['history','circulation.view_own_history'],['reservations','reservations.manage'],['fines','fines.manage'],['incidents','incidents.manage'],['settings','circulation.settings'],['mine','loans.view_own']].find(([,right])=>props.can(right));tab.value=first?.[0]||'overview';if(tab.value!=='mine')options.value=await props.api('/circulation/options');await load();if(props.initialReaderId&&props.can('circulation.issue')){tab.value='issue';reader.value=await props.api('/circulation/readers/'+props.initialReaderId);emit('readerConsumed');await nextTick();codeInput.value?.focus();}}));
 </script>
 <template>
 <section class="circulation-page">
