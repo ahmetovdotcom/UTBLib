@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Annotated
 from fastapi import FastAPI, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select, update, delete, or_
+from sqlalchemy import select, update, delete, or_, text
 from sqlalchemy.exc import IntegrityError
 from .db import Session, DocumentType, Record, VocabularyEntry, MarcsqlSource, RecordCreation, AcquisitionLine, Copy
 from .validation import validate_config, validate_marc, search_text
@@ -93,7 +93,7 @@ def create_type(body:TypeInput,s=Depends(db)): return save_type(body,s)
 def edit_type(id:int,body:TypeInput,s=Depends(db)): return save_type(body,s,id)
 def output(r): return {'id':r.id,'type_id':r.type_id,'version':r.version,'marc':r.marc}
 @app.get('/api/records',dependencies=[Depends(auth)])
-def records(q:str='',type_id:int|None=None,offset:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100),s=Depends(db)):
+def records(q:str='',udc:str=Query('',max_length=150),type_id:int|None=None,offset:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100),s=Depends(db)):
     stmt=select(Record)
     q=q.strip()
     if q:
@@ -106,6 +106,20 @@ def records(q:str='',type_id:int|None=None,offset:int=Query(0,ge=0),limit:int=Qu
             Record.id.in_(matching_copies),
         ))
     if type_id: stmt=stmt.where(Record.type_id==type_id)
+    if udc.strip():
+        # Match MARC 080$a only, before pagination; escape user wildcards.
+        prefix=udc.strip().replace('\\','\\\\').replace('%','\\%').replace('_','\\_')+'%'
+        if s.bind.dialect.name=='postgresql':
+            clause="""EXISTS (SELECT 1 FROM jsonb_array_elements(records.marc->'fields') AS f,
+                jsonb_array_elements(COALESCE(f->'subfields','[]'::jsonb)) AS sf
+                WHERE f->>'tag'='080' AND sf->>'code'='a'
+                AND ltrim(sf->>'value') LIKE :udc_prefix ESCAPE '\\')"""
+        else:
+            clause="""EXISTS (SELECT 1 FROM json_each(json_extract(records.marc,'$.fields')) AS f,
+                json_each(json_extract(f.value,'$.subfields')) AS sf
+                WHERE json_extract(f.value,'$.tag')='080' AND json_extract(sf.value,'$.code')='a'
+                AND ltrim(json_extract(sf.value,'$.value')) LIKE :udc_prefix ESCAPE '\\')"""
+        stmt=stmt.where(text(clause).bindparams(udc_prefix=prefix))
     return [output(r) for r in s.scalars(stmt.order_by(Record.id.desc()).offset(offset).limit(limit))]
 @app.get('/api/records/{id}',dependencies=[Depends(auth)])
 def record(id:int,s=Depends(db)):
