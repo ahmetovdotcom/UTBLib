@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from .db import Session, DocumentType, Record, VocabularyEntry, MarcsqlSource, RecordCreation, AcquisitionLine, Copy
 from .validation import validate_config, validate_marc, search_text
 from .worksheet import definitions, default_config
-from .vocabulary import add_entry, apply_vocabularies, normalized
+from .vocabulary import add_entry, apply_vocabularies, normalized, backfill_automatic, collect_automatic
 from .technical import populate, validate_coded
 DATA=json.loads(Path(os.getenv('MARC_PATH','/data/marc21.json')).read_text())
 DICTIONARY={f['tag']:f for f in DATA['fields']}
@@ -78,6 +78,8 @@ def save_type(body,s,id=None):
     try:
         if not id and any(c['tag']=='952' for c in config):
             s.flush();seed_literature(s,t)
+        s.flush()
+        backfill_automatic(s,t)
         s.commit()
     except IntegrityError: s.rollback(); raise HTTPException(409,'Type name already exists')
     return {'id':t.id,'name':t.name,'config':t.config}
@@ -236,6 +238,7 @@ def import_marcsql(body:MarcsqlInput,s=Depends(db)):
         return {'status':'preview','doc_id':body.doc_id,'marc':marc,'warnings':warnings}
     r=Record(type_id=t.id,marc=marc,search_text=search_text(marc))
     s.add(r);s.flush()
+    collect_automatic(s,t,marc)
     s.add(MarcsqlSource(source=body.source,doc_id=body.doc_id,record_id=r.id,
                        item=body.item,rectype=body.rectype,biblevel=body.biblevel,checksum=checksum))
     try: s.commit()

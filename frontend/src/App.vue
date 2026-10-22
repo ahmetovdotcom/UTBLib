@@ -82,7 +82,7 @@ watch(page,()=>{if(page.value==='catalog'&&editor.value)loadVocabulary();});
 async function search(){records.value=await api(`/records?q=${encodeURIComponent(q.value)}&offset=${offset.value}${filterType.value?'&type_id='+filterType.value:''}`);}
 function selectProfile(t?:DT){profile.value=t?JSON.parse(JSON.stringify(t)):{id:0,name:'',config:JSON.parse(JSON.stringify(defaultConfig.value))};}
 function toggle(tag:string){const i=profile.value.config.findIndex(c=>c.tag===tag);if(i>=0)profile.value.config.splice(i,1);else profile.value.config.push({tag,label:localSpecs.value[tag]?.label||'',local:!!localSpecs.value[tag],required:tag==='000',subfields:[]});}
-async function saveProfile(){await run(async()=>{const {id,...body}=profile.value;profile.value=await api('/types'+(id?'/'+id:''),id?'PUT':'POST',body);types.value=await api('/types');if(editor.value)prepareRecord(editor.value,activeType.value,specs.value);message.value='Настройки сохранены. Рабочий лист обновлён.';});}
+async function saveProfile(){await run(async()=>{const {id,...body}=profile.value;profile.value=await api('/types'+(id?'/'+id:''),id?'PUT':'POST',body);types.value=await api('/types');if(editor.value){prepareRecord(editor.value,activeType.value,specs.value);await loadVocabulary();}message.value='Настройки сохранены. Рабочий лист обновлён.';});}
 function configChanged(event:Event){const id=Number((event.target as HTMLSelectElement).value);selectProfile(types.value.find(t=>t.id===id));}
 function fillOperator(){
  if(!editor.value||editor.value.id||!currentUser.value)return;
@@ -109,7 +109,7 @@ function closeEditor(){if(dirty.value){confirmClose.value=true;return;}editor.va
 async function saveRecord(){if(!can('catalog.edit'))return;await run(async()=>{if(!editor.value)return;if(pendingRecord.value){throw Error('Восстановите незавершённое сохранение кнопкой выше. Повтор будет отправлен с исходными данными.');}const {id,...body}=cleanRecord(editor.value);if(id){await acceptSaved(await api('/records/'+id,'PUT',body));}else{await postNewRecord({...body,request_key:creationKey.value,initial_acquisition:null});}});}
 
 async function deleteRecord(){if(!deleteTarget.value?.id||busy.value)return;const target=deleteTarget.value;await run(async()=>{await api('/records/'+target.id+'?version='+target.version,'DELETE');if(editor.value?.id===target.id){editor.value=null;rawOpen.value=false;}deleteTarget.value=null;if(records.value.length===1&&records.value[0]?.id===target.id&&offset.value>0)offset.value=Math.max(0,offset.value-50);await search();message.value='Запись №'+target.id+' удалена';});}
-function title(r:RecordData){return r.marc.fields.find(f=>f.tag==='245')?.subfields?.filter(s=>s.code==='a'||s.code==='b').map(s=>s.value).join(' ')||'Без заглавия';}
+function title(r:RecordData){return r.marc.fields.find(f=>f.tag==='245')?.subfields?.filter(s=>s.code==='a').map(s=>s.value.trim()).filter(Boolean).join(' ')||'Без заглавия';}
 function author(r:RecordData){return r.marc.fields.find(f=>f.tag==='100')?.subfields?.find(s=>s.code==='a')?.value||'—';}
 function openMenu(e:MouseEvent,f:MF,sub?:SF){if(!can('catalog.edit'))return;e.preventDefault();menu.value={x:Math.max(8,Math.min(e.clientX,window.innerWidth-285)),y:Math.max(8,Math.min(e.clientY,window.innerHeight-235)),field:f,sub};}
 function canRepeat(){if(!menu.value||technical(menu.value.field,menu.value.sub))return false;const {field,sub}=menu.value;return sub?!!specs.value[field.tag]?.subfields.find(s=>s.code===sub.code)?.repeatable:!!specs.value[field.tag]?.repeatable;}
