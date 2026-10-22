@@ -10,8 +10,14 @@ def validate_config(config, dictionary, local_dictionary=None):
     if len(tags)!=len(set(tags)): errors.append('Duplicate profile fields')
     return errors
 
-def validate_marc(marc, config, dictionary):
+def validate_marc(marc, config, dictionary, previous=None):
     errors=[]; warnings=[]
+    # MARCSQL exports may leave 245 indicators blank. Preserve only blanks
+    # already stored in this record; do not invent cataloguing semantics.
+    legacy_blanks=Counter(
+        pos for f in (previous or {}).get('fields',[]) if f['tag']=='245'
+        for pos in (1,2) if f.get(f'ind{pos}')==' '
+    )
     if len(marc['leader'])!=24 or not marc['leader'].isascii(): errors.append('Leader must contain 24 ASCII characters')
     fields=marc['fields']; counts=Counter(f['tag'] for f in fields)
     for c in config:
@@ -35,7 +41,12 @@ def validate_marc(marc, config, dictionary):
             v=f.get(f'ind{pos}')
             if v is None or len(v)!=1 or not v.isascii(): errors.append(f'{tag}: indicator {pos} must be one ASCII character'); continue
             options=[x['code'] for ind in (spec or {}).get('indicators',[]) if ind['position']==pos for x in ind['values']]
-            if options and v not in options and v!='|': errors.append(f'{tag}: invalid indicator {pos}: {v!r}')
+            if options and v not in options and v!='|':
+                if tag=='245' and v==' ' and legacy_blanks[pos]>0:
+                    legacy_blanks[pos]-=1
+                    warnings.append(f'245: сохранён пустой индикатор {pos} из прежней записи; его можно уточнить в настройках поля «Индикаторы»')
+                else:
+                    errors.append(f'{tag}: invalid indicator {pos}: {v!r}')
         subs=f.get('subfields') or []; sc=Counter(s['code'] for s in subs)
         for s in subs:
             definition=next((x for x in (spec or {}).get('subfields',[]) if x['code']==s['code']),None)

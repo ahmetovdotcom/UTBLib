@@ -207,3 +207,50 @@ def test_vocabulary_edit_selected_without_changing_dictionary(client):
     client.put(f'/api/types/{t}',json={k:config[k] for k in ('name','config')})
     assert client.post('/api/records',json=p).status_code==201
     assert set(x['value'] for x in client.get(f'/api/types/{t}/vocabulary').json())=={'3','378.2'}
+
+
+@pytest.mark.parametrize('local',[False,True])
+def test_edit_imported_blank_title_indicators_preserves_source(client,local):
+    config=[{'tag':'245','required':True,'local':local}]
+    type_id=client.post('/api/types',json={'name':'Legacy','config':config}).json()['id']
+    item='245  \x1faСтарое заглавие\x1fbПродолжение'
+    imported=client.post('/api/import/marcsql',json={
+        'source':'regression','doc_id':1,'type_id':type_id,
+        'rectype':'a','biblevel':'m','item':item,'preview':False,
+    })
+    assert imported.status_code==200,imported.text
+    record_id=imported.json()['record_id']
+    saved=client.get(f'/api/records/{record_id}').json()
+    body={k:saved[k] for k in ('type_id','version','marc')}
+    title=next(f for f in body['marc']['fields'] if f['tag']=='245')
+    title['subfields'][0]['value']='Уточнённое заглавие'
+    updated=client.put(f'/api/records/{record_id}',json=body)
+    assert updated.status_code==200,updated.text
+    result=updated.json()
+    assert result['marc']==body['marc']
+    assert len([w for w in result['warnings'] if 'пустой индикатор' in w])==2
+    assert client.get(f'/api/records/{record_id}/marcsql-source').json()['item']==item
+    # Correction is allowed; subsequent saves cannot restore invalid blanks.
+    body['version']=result['version']
+    title['ind1']='0';title['ind2']='0'
+    corrected=client.put(f'/api/records/{record_id}',json=body)
+    assert corrected.status_code==200,corrected.text
+    body['version']=corrected.json()['version']
+    title['ind1']=' ';title['ind2']=' '
+    assert client.put(f'/api/records/{record_id}',json=body).status_code==422
+
+
+@pytest.mark.parametrize('ind1,ind2',[(' ',' '),('9','0'),('0','x')])
+def test_new_title_indicators_remain_strict(client,ind1,ind2):
+    body=payload(make_type(client))
+    body['marc']['fields'][0].update(ind1=ind1,ind2=ind2)
+    assert client.post('/api/records',json=body).status_code==422
+
+
+def test_legacy_blank_exception_is_position_specific():
+    original=payload(1)['marc']
+    original['fields'][0]['ind1']=' '
+    modified=copy.deepcopy(original)
+    modified['fields'][0].update(ind1='0',ind2=' ')
+    errors,_=validate_marc(modified,[],DICTIONARY,previous=original)
+    assert errors==["245: invalid indicator 2: ' '"]

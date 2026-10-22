@@ -140,7 +140,7 @@ def save_record(body,s,id=None,user=None):
         from .catalog_vocabularies import set_operator
         set_operator(marc,user.display_name)
     effective={**DICTIONARY,**{c['tag']:LOCAL_DICTIONARY[c['tag']] for c in t.config if c.get('local') and c['tag'] in LOCAL_DICTIONARY}}
-    errors,warnings=validate_marc(marc,t.config,effective)
+    errors,warnings=validate_marc(marc,t.config,effective,previous=previous_marc)
     errors+=validate_coded(marc,previous.marc if previous else None)
     if errors: raise HTTPException(422,errors)
     if id:
