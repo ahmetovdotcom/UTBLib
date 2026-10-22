@@ -73,14 +73,16 @@ def title(s,c):
 def active_loan(s,cid):return s.scalar(select(Loan).where(Loan.copy_id==cid,Loan.closed_at.is_(None)))
 def active_reservation(s,cid):return s.scalar(select(Reservation).where(Reservation.assigned_copy_id==cid,Reservation.status.in_(ACTIVE_RESERVATIONS)))
 def queued_others(s,rid,reader_id):return bool(s.scalar(select(Reservation.id).where(Reservation.record_id==rid,Reservation.reader_id!=reader_id,Reservation.status.in_(ACTIVE_RESERVATIONS)).limit(1)))
-def availability(s,c):
-    d=detail(s,c)
+def copy_availability(c,d,loan=None,reservation=None):
     if c.status!='active':return c.status
+    if loan:return 'on_loan'
     if d.operation_state!='normal':return d.operation_state
     if d.condition in ('severe','irreparable','lost'):return 'unavailable'
-    if active_loan(s,c.id):return 'on_loan'
-    if active_reservation(s,c.id):return 'reserved'
+    if reservation:return 'reserved'
     return 'available'
+
+def availability(s,c):
+    return copy_availability(c,detail(s,c),active_loan(s,c.id),active_reservation(s,c.id))
 def suggested(s,c,p=None):
     p=p or policy(s);rid=record_id(s,c)
     count=s.scalar(select(func.count()).select_from(record_copies(s,rid).where(Copy.status=='active',~Copy.id.in_(select(CopyCirculation.copy_id).where(CopyCirculation.operation_state=='lost'))).subquery()))

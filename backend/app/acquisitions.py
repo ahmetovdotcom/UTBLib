@@ -216,18 +216,40 @@ def make_router(auth,db):
         return copy_output(c)
 
     @router.get('/records/{id}/copies')
-    def copies(id:int,q:str='',offset:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100),s=Depends(db)):
+    def copies(id:int,q:str='',offset:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100),s=Depends(db),user=Depends(auth)):
         if s.get(Record,id) is None: raise HTTPException(404,'Запись не найдена')
         stmt=select(Copy,AcquisitionLine,Acquisition).outerjoin(AcquisitionLine,Copy.line_id==AcquisitionLine.id).outerjoin(Acquisition,AcquisitionLine.acquisition_id==Acquisition.id).where((AcquisitionLine.record_id==id)|(Copy.record_id==id))
         total=s.scalar(select(func.count()).select_from(stmt.subquery()))
         if q: stmt=stmt.where(Copy.inventory_number.contains(q,autoescape=True)|Copy.barcode.contains(q,autoescape=True))
         count=s.scalar(select(func.count()).select_from(stmt.subquery()))
         active=s.scalar(select(func.count()).select_from(select(Copy.id).where(((Copy.line_id.in_(select(AcquisitionLine.id).where(AcquisitionLine.record_id==id)))|(Copy.record_id==id)),Copy.status=='active').subquery()))
-        return {'total':total,'active':active,'matched':count,'items':[copy_output(*row) for row in s.execute(stmt.order_by(Copy.id).offset(offset).limit(limit))]}
+        from .circulation_models import Loan,Reservation,CopyCirculation
+        from .circulation_service import copy_availability,detail,record_copies,ACTIVE_RESERVATIONS
+        from .reader_models import Reader
+        from .security import has
+        rows=list(s.execute(stmt.order_by(Copy.id).offset(offset).limit(limit)))
+        ids=[row[0].id for row in rows]
+        loans={l.copy_id:l for l in s.scalars(select(Loan).where(Loan.copy_id.in_(ids),Loan.closed_at.is_(None)))}
+        reservations={r.assigned_copy_id:r for r in s.scalars(select(Reservation).where(Reservation.assigned_copy_id.in_(ids),Reservation.status.in_(ACTIVE_RESERVATIONS)))}
+        details={d.copy_id:d for d in s.scalars(select(CopyCirculation).where(CopyCirculation.copy_id.in_(ids)))}
+        can_view=any(has(user,p) for p in ('circulation.issue','circulation.return','circulation.view_any_history'))
+        readers={r.id:r for r in s.scalars(select(Reader).where(Reader.id.in_([l.reader_id for l in loans.values()])))} if can_view else {}
+        items=[]
+        for c,line,receipt in rows:
+            loan=loans.get(c.id);reservation=reservations.get(c.id)
+            state=copy_availability(c,details.get(c.id) or detail(s,c),loan,reservation)
+            item={**copy_output(c,line,receipt),'availability':state,'can_edit':c.status=='active' and not loan and not reservation,'loan':None}
+            if loan and can_view:
+                borrower=readers[loan.reader_id]
+                item['loan']={'id':loan.id,'reader_id':borrower.id,'reader_name':borrower.full_name,'ticket_number':borrower.ticket_number,'issued_at':loan.issued_at,'due_at':loan.due_at}
+            items.append(item)
+        on_loan=s.scalar(select(func.count()).select_from(Loan).where(Loan.copy_id.in_(record_copies(s,id).with_only_columns(Copy.id)),Loan.closed_at.is_(None)))
+        return {'total':total,'active':active,'on_loan':on_loan,'matched':count,'items':items}
+
 
     @router.put('/copies/{id}')
     def edit_copy(id:int,body:CopyInput,s=Depends(db)):
-        c=s.get(Copy,id)
+        c=s.scalar(select(Copy).where(Copy.id==id).with_for_update().execution_options(populate_existing=True))
         if c is None: raise HTTPException(404,'Экземпляр не найден')
         from .circulation_service import active_loan,active_reservation
         if active_loan(s,c.id) or active_reservation(s,c.id):raise HTTPException(409,'Экземпляр выдан или забронирован; реквизиты нельзя менять')
