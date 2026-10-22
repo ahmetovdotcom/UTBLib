@@ -76,6 +76,7 @@ def identity(request:Request,s=Depends(get_db)):
 
 # Every existing endpoint has a permission; unmatched paths are denied.
 def permission_for(method,path):
+    if path.startswith('/api/settings-transfer/'): return 'settings.edit'
     if path.startswith('/api/import/'): return 'import.run'
     if path in ('/api/dictionary','/api/types'): return 'catalog.view' if method=='GET' else 'settings.edit'
     if path.startswith('/api/types/'): return 'catalog.view' if method=='GET' else 'settings.edit'

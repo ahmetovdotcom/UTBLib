@@ -60,7 +60,7 @@ def dictionary(): return {**DATA,'local_fields':list(LOCAL_DICTIONARY.values()),
 @app.get('/api/types',dependencies=[Depends(auth)])
 def types(s=Depends(db)):
     return [{'id':t.id,'name':t.name,'config':t.config} for t in s.scalars(select(DocumentType).order_by(DocumentType.id))]
-def save_type(body,s,id=None):
+def check_type(body):
     config=[c.model_dump() for c in body.config]
     errors=validate_config(config,DICTIONARY,LOCAL_DICTIONARY)
     if not body.name.strip(): errors.append('Name is empty')
@@ -71,6 +71,10 @@ def save_type(body,s,id=None):
             if code not in allowed: errors.append(c['tag']+': неизвестная строка справочника')
             if c['tag'] in ('000','001','005','008') or (c['tag']=='990' and c.get('local') and code in ('d','e','f')): errors.append(c['tag']+': служебное поле заполняется автоматически')
     if errors: raise HTTPException(422,errors)
+    return config
+
+def save_type(body,s,id=None):
+    config=check_type(body)
     t=s.get(DocumentType,id) if id else DocumentType()
     if t is None: raise HTTPException(404,'Type not found')
     from .catalog_vocabularies import configure,seed_literature
@@ -269,3 +273,6 @@ app.include_router(ksu_router(auth,db))
 
 from .statistics import make_router as statistics_router
 app.include_router(statistics_router(auth,db))
+
+from .settings_transfer import make_router as settings_router
+app.include_router(settings_router(auth,db,TypeInput,check_type,DICTIONARY,LOCAL_DICTIONARY))
