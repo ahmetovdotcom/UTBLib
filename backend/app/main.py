@@ -1,7 +1,7 @@
 import json, os, secrets
 from pathlib import Path
 from typing import Annotated
-from fastapi import FastAPI, Depends, Header, HTTPException, Query
+from fastapi import FastAPI, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select, update, delete, or_
 from sqlalchemy.exc import IntegrityError
@@ -276,3 +276,14 @@ app.include_router(statistics_router(auth,db))
 
 from .settings_transfer import make_router as settings_router
 app.include_router(settings_router(auth,db,TypeInput,check_type,DICTIONARY,LOCAL_DICTIONARY))
+
+from .readers import make_router as readers_router
+app.include_router(readers_router(auth,db))
+
+@app.middleware('http')
+async def reader_private_responses(request:Request,call_next):
+    response=await call_next(request)
+    if request.url.path.startswith(('/api/readers','/api/visits','/api/reader-branches')):
+        response.headers['Cache-Control']='private, no-store'
+        response.headers['X-Content-Type-Options']='nosniff'
+    return response

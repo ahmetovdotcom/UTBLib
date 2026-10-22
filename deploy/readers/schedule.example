@@ -1,0 +1,5 @@
+# Ночной запуск теперь выполняется сервисом readers-scheduler, не cron.
+# .env.readers: READERS_NIGHTLY_ENABLED=true, READERS_NIGHTLY_TIME=03:20
+# Часовой пояс фиксирован: Asia/Almaty.
+# Запуск на сервере: ./deploy/readers/nightly.sh
+# Удалите старые cron-задания AD / Platonus, чтобы не запускать две схемы одновременно.

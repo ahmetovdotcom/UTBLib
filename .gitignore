@@ -18,3 +18,13 @@ dist/
 .DS_Store
 test-created.json
 test-failure.png
+
+.env.readers
+
+reader-import/
+
+!.env.readers.example
+
+compose.readers.local.json
+
+deploy/readers/certs/

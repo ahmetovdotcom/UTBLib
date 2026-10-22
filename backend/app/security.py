@@ -12,6 +12,16 @@ from sqlalchemy.exc import IntegrityError
 from .db import User, UserSession, LoginAttempt, UserAudit, get_db, Session
 
 PERMISSIONS={
+ 'readers.registry.view':'Просмотр реестра читателей',
+ 'readers.registry.edit':'Редактирование читателей и пунктов обслуживания',
+ 'readers.registry.export':'Выгрузка читателей',
+ 'readers.analytics.view':'Аналитика читателей',
+ 'readers.personal_data.view':'Персональные данные читателей (ИИН и дата рождения)',
+ 'readers.ticket.print':'Печать читательского билета',
+ 'readers.source.import':'Поиск и загрузка читателей из AD / Platonus',
+ 'readers.sync.admin':'Администрирование синхронизации читателей',
+ 'visits.record':'Регистрация посещений',
+ 'visits.view':'Журнал и статистика посещений',
  'catalog.view':'Просмотр каталога и экземпляров',
  'catalog.edit':'Создание и редактирование записей',
  'catalog.delete':'Удаление записей каталога',
@@ -76,6 +86,17 @@ def identity(request:Request,s=Depends(get_db)):
 
 # Every existing endpoint has a permission; unmatched paths are denied.
 def permission_for(method,path):
+    if path=='/api/reader-branches': return 'readers.registry.edit' if method!='GET' else 'readers.branches.access'
+    if path.startswith('/api/reader-branches/'): return 'readers.registry.edit'
+    if path.startswith('/api/readers'):
+        if path in ('/api/readers/source-search','/api/readers/source-import'): return 'readers.source.import'
+        if path.startswith('/api/readers/conflicts/'): return 'readers.sync.admin'
+        if path.endswith('/export'): return 'readers.registry.export'
+        if path.endswith('/analytics'): return 'readers.analytics.view'
+        if path.endswith('/sync-status'): return 'readers.sync.admin'
+        if path.endswith('/ticket'): return 'readers.ticket.print'
+        return 'readers.registry.view' if method=='GET' else 'readers.registry.edit'
+    if path.startswith('/api/visits'): return 'visits.record' if method=='POST' or path.endswith('/lookup') else 'visits.view'
     if path.startswith('/api/settings-transfer/'): return 'settings.edit'
     if path.startswith('/api/import/'): return 'import.run'
     if path in ('/api/dictionary','/api/types'): return 'catalog.view' if method=='GET' else 'settings.edit'
@@ -99,7 +120,10 @@ def auth(request:Request,s=Depends(get_db)):
         if request.method!='POST' or request.url.path not in ('/api/import/marcsql','/api/import/marcsql-copies'): raise HTTPException(403,'Ключ доступен только для импорта')
         return None
     user=identity(request,s)
-    require(user,permission_for(request.method,request.url.path))
+    permission=permission_for(request.method,request.url.path)
+    if permission=='readers.branches.access':
+        if not any(has(user,p) for p in ('readers.registry.view','readers.registry.edit','visits.record','visits.view')): raise HTTPException(403,'Недостаточно прав')
+    else: require(user,permission)
     return user
 
 def admin(user=Depends(identity)):
@@ -114,7 +138,7 @@ class UserInput(Strict):
     username:str=Field(pattern=r'^[A-Za-z0-9_.-]{3,80}$')
     display_name:str=Field(min_length=1,max_length=160)
     role:Literal['admin','librarian','viewer']='viewer'
-    permissions:list[str]=Field(default_factory=lambda:['catalog.view'],max_length=30)
+    permissions:list[str]=Field(default_factory=lambda:['catalog.view'],max_length=100)
     active:bool=True
     password:str|None=Field(default=None,min_length=8,max_length=256)
     version:int|None=None
@@ -170,7 +194,7 @@ def login(body:Login,request:Request,response:Response,s=Depends(get_db)):
     if bucket: s.delete(bucket)
     s.execute(delete(UserSession).where(UserSession.expires_at<=now))
     token=secrets.token_urlsafe(32)
-    s.add(UserSession(token_hash=digest(token),user_id=user.id,expires_at=now+LIFETIME));s.commit()
+    s.add(UserSession(token_hash=digest(token),user_id=user.id,expires_at=now+LIFETIME));audit(s,user.id,user.id,'login',{});s.commit()
     response.set_cookie(COOKIE,token,max_age=LIFETIME,httponly=True,samesite='strict',secure=os.getenv('COOKIE_SECURE','false').lower()=='true',path='/')
     response.headers['Cache-Control']='no-store'
     return {'user':public(user),'csrf_token':digest('csrf:'+token)}

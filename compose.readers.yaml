@@ -1,0 +1,58 @@
+# Optional overlay. No ports are published and nothing contacts an upstream source by default.
+services:
+  api:
+    env_file: .env.readers
+    networks: [default, readers-source]
+    volumes:
+      - ./deploy/readers/certs:/reader-certs:ro
+  platonus-readers-tunnel:
+    profiles: [readers-tunnel]
+    build:
+      context: ./deploy/readers
+      dockerfile: Dockerfile.tunnel
+    restart: unless-stopped
+    environment:
+      PLATONUS_SSH_HOST: ${PLATONUS_SSH_HOST:-}
+      PLATONUS_SSH_USER: ${PLATONUS_SSH_USER:-}
+      PLATONUS_REMOTE_MYSQL_PORT: ${PLATONUS_REMOTE_MYSQL_PORT:-3306}
+      PLATONUS_REMOTE_MYSQL_HOST: ${PLATONUS_REMOTE_MYSQL_HOST:-}
+    volumes:
+      - ${PLATONUS_SSH_KEY_PATH:-./deploy/readers/not-configured-key}:/keys/id_key:ro
+      - ${PLATONUS_KNOWN_HOSTS_PATH:-./deploy/readers/not-configured-hosts}:/keys/known_hosts:ro
+    networks: [readers-source]
+  readers-sync:
+    profiles: [readers-sync]
+    build: ./backend
+    env_file: .env.readers
+    environment:
+      DATABASE_URL: postgresql+psycopg://catalog:${POSTGRES_PASSWORD}@db/catalog
+      MARC_PATH: /data/marc21.json
+    volumes:
+      - ./data:/data:ro
+      - ./reader-import:/import:ro
+      - ./deploy/readers/certs:/reader-certs:ro
+    networks: [default, readers-source]
+    command: [python, -m, app.reader_sync, platonus, --dry-run, --limit, '10', --no-photos]
+  readers-scheduler:
+    profiles: [readers-nightly]
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env.readers
+    environment:
+      DATABASE_URL: postgresql+psycopg://catalog:${POSTGRES_PASSWORD}@db/catalog
+      MARC_PATH: /data/marc21.json
+    volumes:
+      - ./data:/data:ro
+      - ./deploy/readers/certs:/reader-certs:ro
+    networks: [default, readers-source]
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    command: [python, -m, app.reader_scheduler]
+
+networks:
+  readers-source:
+    # Private Docker bridge with outgoing SSH connectivity; no host ports.
+    driver: bridge

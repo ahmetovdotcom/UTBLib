@@ -219,3 +219,6 @@ class RecordActivity(Base):
     action: Mapped[str]=mapped_column(String(10))
     title: Mapped[str]=mapped_column(Text)
     created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),default=utcnow,index=True)
+
+# Register library people with the same metadata/migration lifecycle as the catalogue.
+from . import reader_models  # noqa: E402,F401
