@@ -53,6 +53,8 @@ def full_copy(s,c):
     return result
 
 def change_status(s,c,status,reason):
+    from .circulation_service import active_loan,active_reservation
+    if active_loan(s,c.id) or active_reservation(s,c.id):raise HTTPException(409,'Экземпляр выдан или закреплён бронью. Сначала завершите операцию книговыдачи.')
     before={'status':c.status,'version':c.version}
     c.status=status;c.version+=1
     s.add(CopyHistory(copy_id=c.id,before=before,after={'status':status,'version':c.version,'reason':reason}))

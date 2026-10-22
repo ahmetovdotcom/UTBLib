@@ -6,7 +6,7 @@ const items=ref<any[]>([]),permissions=ref<Record<string,string>>({}),presets=re
 const deleteTarget=ref<any>(null),deleteDialog=ref<HTMLDialogElement>();
 async function askDelete(user:any){error.value='';deleteTarget.value=user;await nextTick();deleteDialog.value?.showModal();}
 async function remove(){await run(async()=>{const id=deleteTarget.value.id;await props.api('/users/'+id+'?version='+deleteTarget.value.version,'DELETE');deleteDialog.value?.close();deleteTarget.value=null;if(id===props.currentId){emit('selfChanged');return;}notice.value='Пользователь удалён. Доступ закрыт, история действий сохранена.';await load();});}
-const roles:Record<string,string>={admin:'Администратор',librarian:'Библиотекарь',viewer:'Наблюдатель'};
+const roles:Record<string,string>={admin:'Администратор',librarian:'Библиотекарь',viewer:'Наблюдатель',manager:'Руководитель',reader:'Читатель'};
 async function load(){const result=await props.api('/users');items.value=result.items;permissions.value=result.permissions;presets.value=result.presets;}
 async function run(fn:()=>Promise<void>){busy.value=true;error.value='';try{await fn();}catch(e){error.value=e instanceof Error?e.message:String(e);}finally{busy.value=false;}}
 async function open(user?:any){error.value='';draft.value=user?{...user,permissions:[...user.permissions],password:''}:{username:'',display_name:'',role:'viewer',permissions:['catalog.view'],active:true,password:''};await nextTick();dialog.value?.showModal();}

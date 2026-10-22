@@ -76,7 +76,7 @@ class AcquisitionLine(Base):
 class Copy(Base):
     __tablename__='copies'
     status: Mapped[str]=mapped_column(String(20),default='active',server_default='active')
-    __table_args__=(CheckConstraint('(line_id IS NOT NULL AND record_id IS NULL) OR (line_id IS NULL AND record_id IS NOT NULL AND request_key IS NOT NULL AND payload_hash IS NOT NULL)',name='ck_copy_origin'),CheckConstraint('unit_price IS NULL OR unit_price >= 0',name='ck_copy_price'),)
+    __table_args__=(CheckConstraint('(line_id IS NOT NULL AND record_id IS NULL) OR (line_id IS NULL AND record_id IS NOT NULL AND request_key IS NOT NULL AND payload_hash IS NOT NULL)',name='ck_copy_origin'),CheckConstraint("length(trim(barcode))>0",name='ck_copy_barcode_nonempty'),CheckConstraint('unit_price IS NULL OR unit_price >= 0',name='ck_copy_price'),)
     id: Mapped[int]=mapped_column(primary_key=True)
     line_id: Mapped[int|None]=mapped_column(ForeignKey('acquisition_lines.id',ondelete='RESTRICT'),index=True,nullable=True)
     record_id: Mapped[int|None]=mapped_column(ForeignKey('records.id',ondelete='RESTRICT'),index=True,nullable=True)
@@ -222,3 +222,5 @@ class RecordActivity(Base):
 
 # Register library people with the same metadata/migration lifecycle as the catalogue.
 from . import reader_models  # noqa: E402,F401
+
+from . import circulation_models  # noqa: E402,F401

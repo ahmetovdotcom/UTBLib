@@ -291,7 +291,11 @@ def make_router(auth,db):
         result['visits_count'],result['last_visit']=s.execute(select(func.count(),func.max(LibraryVisit.scanned_at)).where(LibraryVisit.reader_id==id)).one()
         result['visits']=[{'id':v.id,'scanned_at':v.scanned_at,'branch_id':v.branch_id} for v in s.scalars(select(LibraryVisit).where(LibraryVisit.reader_id==id).order_by(LibraryVisit.scanned_at.desc()).limit(10))]
         result['website_logins']=None if not reader.user_id else s.scalar(select(func.count()).where(UserAudit.target_id==reader.user_id,UserAudit.action=='login'))
-        result['circulation']='Данные модуля недоступны'; result['clearance_available']=False
+        if user.role=='admin':result['user_id']=reader.user_id
+        result['circulation']=None; result['clearance_available']=False
+        if any(has(user,p) for p in ('circulation.issue','circulation.return','circulation.view_any_history')):
+            from .circulation_service import summary
+            result['circulation']=summary(s,reader)
         result['problems']=list(s.scalars(select(ReaderConflict.code).where(ReaderConflict.reader_id==id,ReaderConflict.resolved.is_(False))))
         return result
     @router.post('/api/readers/{id}/photo')

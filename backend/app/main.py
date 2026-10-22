@@ -283,7 +283,10 @@ app.include_router(readers_router(auth,db))
 @app.middleware('http')
 async def reader_private_responses(request:Request,call_next):
     response=await call_next(request)
-    if request.url.path.startswith(('/api/readers','/api/visits','/api/reader-branches')):
+    if request.url.path.startswith(('/api/readers','/api/visits','/api/reader-branches','/api/circulation')):
         response.headers['Cache-Control']='private, no-store'
         response.headers['X-Content-Type-Options']='nosniff'
     return response
+
+from .circulation import make_router as circulation_router
+app.include_router(circulation_router(auth,db))

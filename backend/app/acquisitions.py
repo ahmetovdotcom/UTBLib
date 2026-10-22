@@ -229,6 +229,8 @@ def make_router(auth,db):
     def edit_copy(id:int,body:CopyInput,s=Depends(db)):
         c=s.get(Copy,id)
         if c is None: raise HTTPException(404,'Экземпляр не найден')
+        from .circulation_service import active_loan,active_reservation
+        if active_loan(s,c.id) or active_reservation(s,c.id):raise HTTPException(409,'Экземпляр выдан или забронирован; реквизиты нельзя менять')
         if c.version!=body.version or c.status!='active': raise HTTPException(409,'Экземпляр изменён, списан или отменён. Обновите список.')
         before={k:getattr(c,k) for k in type(body).model_fields};before['checked_on']=str(c.checked_on) if c.checked_on else None
         values=body.model_dump(exclude={'version'});values['version']=body.version+1

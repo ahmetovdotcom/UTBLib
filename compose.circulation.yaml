@@ -1,0 +1,13 @@
+# Add to either local or server Compose. No connection to AD/Platonus.
+services:
+  circulation-worker:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://catalog:${POSTGRES_PASSWORD}@db/catalog
+    depends_on:
+      api:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    command: [python, -m, app.circulation_worker]

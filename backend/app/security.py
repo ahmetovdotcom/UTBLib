@@ -12,6 +12,22 @@ from sqlalchemy.exc import IntegrityError
 from .db import User, UserSession, LoginAttempt, UserAudit, get_db, Session
 
 PERMISSIONS={
+ 'circulation.issue':'Выдача книг',
+ 'circulation.return':'Возврат книг',
+ 'circulation.renew':'Продление выдач',
+ 'circulation.override_limits':'Обход лимитов и срока билета с причиной',
+ 'circulation.override_due_date':'Увеличенный срок выдачи с причиной',
+ 'circulation.view_any_history':'Просмотр всей истории выдач',
+ 'circulation.view_own_history':'Просмотр своих операций выдачи',
+ 'loans.view_own':'Свои книги читателя',
+ 'loans.renew_own':'Продление своих книг',
+ 'fines.manage':'Учёт штрафов и оплаты',
+ 'fines.waive':'Освобождение от штрафа',
+ 'reservations.manage':'Управление бронями',
+ 'incidents.manage':'Решения по утратам и повреждениям',
+ 'circulation.settings':'Настройки книговыдачи и лимитов',
+ 'circulation.copies':'Состояние и доступность экземпляров',
+
  'readers.registry.view':'Просмотр реестра читателей',
  'readers.registry.edit':'Редактирование читателей и пунктов обслуживания',
  'readers.registry.export':'Выгрузка читателей',
@@ -38,6 +54,9 @@ PERMISSIONS={
  'import.run':'Импорт MARCSQL',
 }
 PRESETS={'viewer':['catalog.view'],'librarian':['catalog.view','catalog.edit','copies.edit','acquisitions.view','acquisitions.edit','withdrawals.view']}
+PRESETS['librarian']+=['readers.registry.view','visits.record','circulation.issue','circulation.return','circulation.renew','circulation.view_own_history','reservations.manage']
+PRESETS['manager']=list(PERMISSIONS)
+PRESETS['reader']=['loans.view_own','loans.renew_own']
 COOKIE='library_session'
 LIFETIME=12*60*60
 
@@ -86,6 +105,22 @@ def identity(request:Request,s=Depends(get_db)):
 
 # Every existing endpoint has a permission; unmatched paths are denied.
 def permission_for(method,path):
+    if path.startswith('/api/circulation/'):
+        suffix=path[len('/api/circulation/'):]
+        if suffix=='options': return 'circulation.options'
+        if suffix=='issue': return 'circulation.issue'
+        if suffix.startswith('mine'): return 'loans.renew_own' if method=='POST' else 'loans.view_own'
+        if suffix.endswith('/return'): return 'circulation.return'
+        if suffix.endswith('/renew'): return 'circulation.renew'
+        if suffix.endswith('/limits') or suffix.endswith('/account') or suffix in ('settings','accounts'): return 'circulation.settings'
+        if suffix.startswith('fines'): return 'fines.manage'
+        if suffix.startswith('incidents'): return 'incidents.manage'
+        if suffix.startswith('reservations'): return 'reservations.manage'
+        if suffix.startswith('copies/') and method=='POST': return 'circulation.copies'
+        if suffix=='loans': return 'circulation.history'
+        if suffix.startswith('loans/') and method=='GET': return 'circulation.loan'
+        if suffix in ('audit','notices'): return 'circulation.view_any_history'
+        return 'circulation.desk'
     if path=='/api/reader-branches': return 'readers.registry.edit' if method!='GET' else 'readers.branches.access'
     if path.startswith('/api/reader-branches/'): return 'readers.registry.edit'
     if path.startswith('/api/readers'):
@@ -118,10 +153,21 @@ def auth(request:Request,s=Depends(get_db)):
         configured=os.getenv('ADMIN_KEY','')
         if not configured or not secrets.compare_digest(key,configured): raise HTTPException(401,'Неверный ключ импорта')
         if request.method!='POST' or request.url.path not in ('/api/import/marcsql','/api/import/marcsql-copies'): raise HTTPException(403,'Ключ доступен только для импорта')
+        lock(s,'circulation-stock-gate')
         return None
     user=identity(request,s)
     permission=permission_for(request.method,request.url.path)
-    if permission=='readers.branches.access':
+    if request.method not in ('GET','HEAD','OPTIONS'):
+        lock(s,'circulation-stock-gate')
+    if permission=='circulation.options':
+        if not any(has(user,p) for p in ('circulation.issue','circulation.return','circulation.renew','circulation.view_any_history','circulation.view_own_history','reservations.manage','fines.manage','incidents.manage','circulation.settings','circulation.copies')): raise HTTPException(403,'Нет доступа к настройкам рабочего места')
+    elif permission=='circulation.desk':
+        if not any(has(user,p) for p in ('circulation.issue','circulation.return','circulation.renew','circulation.view_any_history','reservations.manage','circulation.copies')): raise HTTPException(403,'Нет доступа к рабочему месту книговыдачи')
+    elif permission=='circulation.loan':
+        if not any(has(user,p) for p in ('circulation.issue','circulation.return','circulation.renew','circulation.view_any_history','circulation.view_own_history')): raise HTTPException(403,'Нет доступа к выдаче')
+    elif permission=='circulation.history':
+        if not any(has(user,p) for p in ('circulation.view_any_history','circulation.view_own_history')): raise HTTPException(403,'Нет доступа к истории')
+    elif permission=='readers.branches.access':
         if not any(has(user,p) for p in ('readers.registry.view','readers.registry.edit','visits.record','visits.view')): raise HTTPException(403,'Недостаточно прав')
     else: require(user,permission)
     return user
@@ -137,7 +183,7 @@ class Login(Strict):
 class UserInput(Strict):
     username:str=Field(pattern=r'^[A-Za-z0-9_.-]{3,80}$')
     display_name:str=Field(min_length=1,max_length=160)
-    role:Literal['admin','librarian','viewer']='viewer'
+    role:Literal['admin','manager','librarian','viewer','reader']='viewer'
     permissions:list[str]=Field(default_factory=lambda:['catalog.view'],max_length=100)
     active:bool=True
     password:str|None=Field(default=None,min_length=8,max_length=256)
@@ -234,7 +280,7 @@ def save_user(body,s,actor,id=None):
     if target is None: target=User(password_hash=password_hash(body.password),version=0);s.add(target)
     elif body.password: target.password_hash=password_hash(body.password)
     target.username=body.username;target.display_name=body.display_name;target.role=body.role
-    target.permissions=[] if body.role=='admin' else body.permissions;target.active=body.active;target.version+=1
+    target.permissions=[] if body.role=='admin' else [p for p in body.permissions if p in ('loans.view_own','loans.renew_own')] if body.role=='reader' else body.permissions;target.active=body.active;target.version+=1
     try:
         s.flush()
         if id: s.execute(delete(UserSession).where(UserSession.user_id==id))
