@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import {computed,onMounted,ref} from 'vue';
+import KsuDepartments from './KsuDepartments.vue';
+const tab=ref('receipts');
 const props=defineProps<{canEdit:boolean,api:(path:string,method?:string,body?:unknown)=>Promise<any>}>();
 const emit=defineEmits<{record:[id:number],receipt:[id:number]}>();
 const year=ref(Number(new Intl.DateTimeFormat('en',{year:'numeric',timeZone:'Asia/Almaty'}).format(new Date())));
@@ -19,7 +21,9 @@ async function download(){await run(async()=>{const r=await fetch('/api/ksu/expo
 onMounted(()=>run(async()=>{options.value=await props.api('/ksu/options');mapping.value=(await props.api('/ksu/rules')).items;await refresh();}));
 </script>
 <template>
-<section class="ksu-page" :aria-busy="busy">
+<div class="record-tabs ksu-tabs" role="group" aria-label="Отчёты КСУ"><button :class="{active:tab==='receipts'}" :aria-pressed="tab==='receipts'" @click="tab='receipts'">Поступления · первый лист</button><button :class="{active:tab==='departments'}" :aria-pressed="tab==='departments'" @click="tab='departments'">Поступления по кафедрам</button></div>
+<KsuDepartments v-if="tab==='departments'" :api="api" @record="emit('record',$event)" @receipt="emit('receipt',$event)" />
+<section v-show="tab==='receipts'" class="ksu-page" :aria-busy="busy">
  <div class="page-heading"><div><div class="eyebrow">УЧЁТ ФОНДА</div><h1>КСУ · Поступления</h1><p>Книга суммарного учёта — первый лист.</p></div><button :disabled="busy||!report||!!report.issue_count" @click="download">Скачать Excel</button></div>
  <form class="card ksu-toolbar" @submit.prevent="load"><label>Год регистрации<input v-model.number="year" type="number" min="1900" max="9999" required></label><button :disabled="busy">Показать</button><label class="check-label"><input type="checkbox" v-model="detail">Все графы первого листа</label></form>
  <p v-if="error" role="alert" class="inline-error">{{error}}</p><p v-if="message" role="status">{{message}}</p>
@@ -39,5 +43,7 @@ onMounted(()=>run(async()=>{options.value=await props.api('/ksu/options');mappin
 </section>
 </template>
 <style scoped>
+.ksu-tabs{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px}.ksu-tabs button{transition:none}.ksu-tabs button[aria-pressed="false"]{background:white!important;color:#33465c!important}.ksu-tabs button[aria-pressed="true"]{background:#002341!important;color:white!important;border-color:#002341!important}
+
 .ksu-toolbar{display:flex;gap:20px;align-items:end;padding:20px;margin-bottom:20px;flex-wrap:wrap}.ksu-toolbar label:not(.check-label),.ksu-dialog label{display:flex;flex-direction:column;gap:6px}.ksu-toolbar input[type=number]{max-width:120px}.ksu-summary{display:flex;gap:24px;flex-wrap:wrap}.ksu-summary b{display:block;font-size:23px}.ksu-table{max-height:65vh;overflow:auto}.ksu-table table{border-collapse:separate;border-spacing:0;min-width:100%}.ksu-table th,.ksu-table td,.ksu-classification th,.ksu-classification td{padding:10px;border-bottom:1px solid #dce3ed;min-width:100px;text-align:left}.ksu-table thead th{background:#eef3fa}.ksu-table tfoot{font-weight:bold;background:#eef3fa}.ksu-table .cancelled{color:#788391;background:#f4f4f4}.block{display:block;margin-top:6px}.ksu-candidates{margin-top:20px}.ksu-candidate{display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:1px solid #eee;padding:12px 0}.ksu-dialog::backdrop{background:#1e293b88}.ksu-dialog{margin:auto;border:1px solid #dce3ed;width:min(1500px,96vw);max-height:92vh;overflow:auto;padding:24px}.ksu-classification select{max-width:190px;min-width:120px}.ksu-classification td:first-child{min-width:230px}.modal-backdrop{position:fixed;inset:0;z-index:100;background:#1e293b88;display:flex;align-items:center;justify-content:center}.ksu-dialog .modal-actions{position:sticky;bottom:-24px;background:white;padding:16px 0;margin-top:16px}
 </style>
