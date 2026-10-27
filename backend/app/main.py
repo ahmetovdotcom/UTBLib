@@ -283,6 +283,8 @@ from .isbn_lookup import router as isbn_router
 app.include_router(isbn_router(auth))
 from .book_photos import make_router as book_photos_router
 app.include_router(book_photos_router(auth, db, DICTIONARY, LOCAL_DICTIONARY))
+from .photo_transfer import make_router as photo_transfer_router
+app.include_router(photo_transfer_router(auth, db))
 
 from .ksu import make_router as ksu_router
 app.include_router(ksu_router(auth,db))
@@ -299,9 +301,10 @@ app.include_router(readers_router(auth,db))
 @app.middleware('http')
 async def reader_private_responses(request:Request,call_next):
     response=await call_next(request)
-    if request.url.path.startswith(('/api/readers','/api/visits','/api/reader-branches','/api/circulation')):
+    if request.url.path.startswith(('/api/readers','/api/visits','/api/reader-branches','/api/circulation','/api/photo-transfer')):
         response.headers['Cache-Control']='private, no-store'
         response.headers['X-Content-Type-Options']='nosniff'
+        response.headers['Referrer-Policy']='no-referrer'
     return response
 
 from .circulation import make_router as circulation_router

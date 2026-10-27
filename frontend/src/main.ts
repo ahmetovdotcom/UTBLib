@@ -1,1 +1,1 @@
-import {createApp} from 'vue'; import App from './App.vue'; import './style.css'; import './theme.css'; createApp(App).mount('#app');
+import {createApp} from 'vue'; import App from './App.vue'; import PhonePhotos from './PhonePhotos.vue'; import './style.css'; import './theme.css'; createApp(location.pathname==='/phone-photos'?PhonePhotos:App).mount('#app');
