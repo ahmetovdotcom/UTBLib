@@ -94,22 +94,22 @@ def make_router(auth,db):
     @router.get('/report')
     def get_report(year:int=Query(...,ge=1900,le=9999),s=Depends(db)):return report(s,year)
 
-    @router.get('/specialties/report',include_in_schema=False)
-    @router.get('/departments/report')
-    def departments_report(date_from:date,date_to:date,s=Depends(db)):
+    @router.get('/departments/report',include_in_schema=False)
+    @router.get('/specialties/report')
+    def specialties_report(date_from:date,date_to:date,s=Depends(db)):
         if date_from>date_to:raise HTTPException(422,'Начало периода позже окончания')
-        from .ksu_departments import report as department_report
-        return department_report(s,date_from,date_to)
+        from .ksu_specialties import report as specialty_report
+        return specialty_report(s,date_from,date_to)
 
-    @router.get('/specialties/export',include_in_schema=False)
-    @router.get('/departments/export')
-    def departments_export(date_from:date,date_to:date,s=Depends(db)):
+    @router.get('/departments/export',include_in_schema=False)
+    @router.get('/specialties/export')
+    def specialties_export(date_from:date,date_to:date,s=Depends(db)):
         if date_from>date_to:raise HTTPException(422,'Начало периода позже окончания')
-        from .ksu_departments import report as department_report,export_xlsx
-        data=department_report(s,date_from,date_to)
+        from .ksu_specialties import report as specialty_report,export_xlsx
+        data=specialty_report(s,date_from,date_to)
         if data['total']['unpriced_count']:raise HTTPException(409,'Укажите цены в тенге в поступлениях перед выгрузкой.')
         return Response(export_xlsx(data),media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            headers={'Content-Disposition':f'attachment; filename="ksu-departments-{date_from}-{date_to}.xlsx"'})
+            headers={'Content-Disposition':f'attachment; filename="ksu-specialties-{date_from}-{date_to}.xlsx"'})
 
     @router.get('/history/{id}')
     def history(id:int,s=Depends(db)):

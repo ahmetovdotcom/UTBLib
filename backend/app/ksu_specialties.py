@@ -1,4 +1,4 @@
-"""Receipt amounts by full catalogue departments (952$e), without allocation guesses."""
+"""Receipt amounts by full catalogue specialties (952$j), without allocation guesses."""
 from datetime import date
 from decimal import Decimal
 from io import BytesIO
@@ -22,14 +22,14 @@ def report(s, date_from, date_to):
     for a,e in pairs:
         groups={};total=bucket();issues=[]
         for line,record in lines.get(a.id,[]):
-            departments=sorted(vals(record.marc,'952','e'));messages=[]
-            if len(departments)==1:
-                key='department:'+departments[0];label=departments[0]
-            elif not departments:
-                key='missing';label='Не указана кафедра';messages.append('Заполните 952$e «Кафедра» в карточке книги.')
+            specialties=sorted(vals(record.marc,'952','j'));messages=[]
+            if len(specialties)==1:
+                key='specialty:'+specialties[0];label=specialties[0]
+            elif not specialties:
+                key='missing';label='Не указана специальность';messages.append('Заполните 952$j «Специальность» в карточке книги.')
             else:
-                key='multiple';label='Несколько кафедр — не распределено'
-                messages.append('Указано несколько кафедр: '+ '; '.join(departments)+'. Экземпляры и сумма учтены один раз в отдельной колонке, без распределения.')
+                key='multiple';label='Несколько специальностей — не распределено'
+                messages.append('Указано несколько специальностей: '+ '; '.join(specialties)+'. Экземпляры и сумма учтены один раз в отдельной колонке, без распределения.')
             columns[key]=label
             known=line.unit_price is not None and line.currency=='KZT'
             if not known:messages.append('Не указана цена в тенге: исправьте поступление.')
@@ -58,13 +58,13 @@ def export_xlsx(data):
     from openpyxl import Workbook
     from openpyxl.styles import Font, Alignment, PatternFill
     from openpyxl.utils import get_column_letter
-    w=Workbook();ws=w.active;ws.title='По кафедрам'
+    w=Workbook();ws=w.active;ws.title='По специальностям'
     def put(row,col,value):
         c=ws.cell(row,col,value)
         if isinstance(value,str):c.data_type='s'
         return c
     groups=data['columns']+[{'key':'total','label':'Всего'}];width=4+3*len(groups)
-    put(1,1,f"Поступления по кафедрам: {data['date_from']} — {data['date_to']}. Суммы в тенге, без доставки.")
+    put(1,1,f"Поступления по специальностям: {data['date_from']} — {data['date_to']}. Суммы в тенге, без доставки.")
     ws.merge_cells(start_row=1,start_column=1,end_row=1,end_column=width)
     for i,label in enumerate(['№ КСУ','Дата поступления','Источник поступления','Документ'],1):
         put(2,i,label);ws.merge_cells(start_row=2,start_column=i,end_row=3,end_column=i)
@@ -92,8 +92,8 @@ def export_xlsx(data):
     ws.freeze_panes='E4';ws.print_title_rows='1:3';ws.page_setup.orientation='landscape'
     ws.print_area=f'A1:{get_column_letter(width)}{last}'
     notes=w.create_sheet('Пояснения')
-    for text in ['Кафедры — полные значения 952$e из текущих карточек каталога.',
-        'Каждый экземпляр и его стоимость учитываются один раз. Несколько кафедр не распределяются автоматически.',
+    for text in ['Специальности — полные значения 952$j из текущих карточек каталога.',
+        'Каждый экземпляр и его стоимость учитываются один раз. Несколько специальностей не распределяются автоматически.',
         'Наименования считаются отдельно в каждой партии. Общий итог — сумма по партиям, не уникальные названия фонда.',
         'Отменённые поступления и экземпляры без поступления исключены. Списания не уменьшают исторические поступления.',
         'Период определяется по дате поступления включительно. Суммы в тенге, без доставки.']:

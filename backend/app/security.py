@@ -133,6 +133,7 @@ def permission_for(method,path):
         return 'readers.registry.view' if method=='GET' else 'readers.registry.edit'
     if path.startswith('/api/visits'): return 'visits.record' if method=='POST' or path.endswith('/lookup') else 'visits.view'
     if path.startswith('/api/settings-transfer/'): return 'settings.edit'
+    if path in ('/api/catalog-attention','/api/catalog-attention/options') and method=='GET': return 'catalog.view'
     if path.startswith('/api/import/'): return 'import.run'
     if path in ('/api/dictionary','/api/types'): return 'catalog.view' if method=='GET' else 'settings.edit'
     if path.startswith('/api/types/'): return 'catalog.view' if method=='GET' else 'settings.edit'

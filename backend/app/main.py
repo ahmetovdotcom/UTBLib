@@ -304,3 +304,6 @@ async def reader_private_responses(request:Request,call_next):
 
 from .circulation import make_router as circulation_router
 app.include_router(circulation_router(auth,db))
+
+from .catalog_attention import make_router as attention_router
+app.include_router(attention_router(auth,db,DICTIONARY,LOCAL_DICTIONARY))

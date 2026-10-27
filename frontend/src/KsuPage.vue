@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import {computed,onMounted,ref} from 'vue';
-import KsuDepartments from './KsuDepartments.vue';
+import KsuSpecialties from './KsuSpecialties.vue';
 const tab=ref('receipts');
 const props=defineProps<{canEdit:boolean,api:(path:string,method?:string,body?:unknown)=>Promise<any>}>();
 const emit=defineEmits<{record:[id:number],receipt:[id:number]}>();
@@ -21,8 +21,8 @@ async function download(){await run(async()=>{const r=await fetch('/api/ksu/expo
 onMounted(()=>run(async()=>{options.value=await props.api('/ksu/options');mapping.value=(await props.api('/ksu/rules')).items;await refresh();}));
 </script>
 <template>
-<div class="record-tabs ksu-tabs" role="group" aria-label="Отчёты КСУ"><button :class="{active:tab==='receipts'}" :aria-pressed="tab==='receipts'" @click="tab='receipts'">Поступления · первый лист</button><button :class="{active:tab==='departments'}" :aria-pressed="tab==='departments'" @click="tab='departments'">Поступления по кафедрам</button></div>
-<KsuDepartments v-if="tab==='departments'" :api="api" @record="emit('record',$event)" @receipt="emit('receipt',$event)" />
+<div class="record-tabs ksu-tabs" role="group" aria-label="Отчёты КСУ"><button :class="{active:tab==='receipts'}" :aria-pressed="tab==='receipts'" @click="tab='receipts'">Поступления · первый лист</button><button :class="{active:tab==='specialties'}" :aria-pressed="tab==='specialties'" @click="tab='specialties'">Поступления по специальностям</button></div>
+<KsuSpecialties v-if="tab==='specialties'" :api="api" @record="emit('record',$event)" @receipt="emit('receipt',$event)" />
 <section v-show="tab==='receipts'" class="ksu-page" :aria-busy="busy">
  <div class="page-heading"><div><div class="eyebrow">УЧЁТ ФОНДА</div><h1>КСУ · Поступления</h1><p>Книга суммарного учёта — первый лист.</p></div><button :disabled="busy||!report||!!report.issue_count" @click="download">Скачать Excel</button></div>
  <form class="card ksu-toolbar" @submit.prevent="load"><label>Год регистрации<input v-model.number="year" type="number" min="1900" max="9999" required></label><button :disabled="busy">Показать</button><label class="check-label"><input type="checkbox" v-model="detail">Все графы первого листа</label></form>
