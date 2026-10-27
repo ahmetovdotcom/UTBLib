@@ -18,6 +18,11 @@ def record_activity(s,user,record_id,marc,creating):
 
 def make_router(auth,db):
     router=APIRouter(prefix='/api/statistics',dependencies=[Depends(auth)])
+    @router.get('/book-fund')
+    def book_fund(s=Depends(db)):
+        from .book_fund import report
+        return report(s)
+
     @router.get('/staff')
     def staff(date_from:date|None=None,date_to:date|None=None,user_id:int|None=None,
               action:str|None=None,offset:int=Query(0,ge=0),limit:int=Query(30,ge=1,le=100),s=Depends(db)):
