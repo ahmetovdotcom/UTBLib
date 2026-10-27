@@ -22,6 +22,8 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       MARC_PATH: /data/marc21.json
       GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_CATALOG_MODEL: ${OPENAI_CATALOG_MODEL:-gpt-5.6-terra}
     volumes:
       - ./data:/data:ro
     depends_on:

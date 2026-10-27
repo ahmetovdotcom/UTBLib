@@ -17,6 +17,8 @@ WEB_BIND=127.0.0.1
 WEB_PORT=8097
 COOKIE_SECURE=false
 GOOGLE_BOOKS_API_KEY=
+OPENAI_API_KEY=
+OPENAI_CATALOG_MODEL=gpt-5.6-terra
 ENV
   )
   echo 'Создан .env.server. Логин admin, пароль — ADMIN_INITIAL_PASSWORD в этом файле.'

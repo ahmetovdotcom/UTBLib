@@ -281,6 +281,8 @@ app.include_router(marcsql_copies_router(auth,db))
 
 from .isbn_lookup import router as isbn_router
 app.include_router(isbn_router(auth))
+from .book_photos import make_router as book_photos_router
+app.include_router(book_photos_router(auth, db, DICTIONARY, LOCAL_DICTIONARY))
 
 from .ksu import make_router as ksu_router
 app.include_router(ksu_router(auth,db))
