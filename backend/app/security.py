@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from .db import User, UserSession, LoginAttempt, UserAudit, get_db, Session
 
 PERMISSIONS={
+ 'site.manage':'Управление ресурсами, репозиторием, новостями и событиями сайта',
  'circulation.issue':'Выдача книг',
  'circulation.return':'Возврат книг',
  'circulation.renew':'Продление выдач',
@@ -105,6 +106,7 @@ def identity(request:Request,s=Depends(get_db)):
 
 # Every existing endpoint has a permission; unmatched paths are denied.
 def permission_for(method,path):
+    if path.startswith('/api/site-content'): return 'site.manage'
     # Mobile routes delegate this capability through a scoped token and recheck its owner's login.
     if path.startswith('/api/photo-transfer/'): return 'catalog.edit'
     if path in ('/api/book-photos/config','/api/book-photos/analyze'): return 'catalog.edit'

@@ -5,7 +5,7 @@ server {
     server_name catalog.kaztbu.edu.kz;
     ssl_certificate /etc/letsencrypt/live/catalog.kaztbu.edu.kz/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/catalog.kaztbu.edu.kz/privkey.pem;
-    client_max_body_size 10m;
+    client_max_body_size 26m;
     location / {
         proxy_pass http://127.0.0.1:8097;
         proxy_set_header Host $http_host;

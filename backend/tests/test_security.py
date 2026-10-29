@@ -104,8 +104,14 @@ def test_login_throttle_and_hashes(client):
 
 
 def test_every_protected_business_route_has_permission():
+    from app.public_catalog import PUBLIC_PATHS
+    from app.site_content import PUBLIC_PATHS as CONTENT_PATHS
+    PUBLIC_PATHS = PUBLIC_PATHS | CONTENT_PATHS
     for route in app.routes:
         path=getattr(route,'path','')
+        if path in PUBLIC_PATHS:
+            assert route.methods == {'GET'}
+            continue
         if not path.startswith('/api/') or path=='/api/health' or path.startswith(('/api/auth/','/api/users')): continue
         import re
         path=re.sub(r'\{[^}]+\}','1',path)
