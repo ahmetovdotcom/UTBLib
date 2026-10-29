@@ -296,6 +296,8 @@ app.include_router(ksu_router(auth,db))
 
 from .statistics import make_router as statistics_router
 app.include_router(statistics_router(auth,db))
+from .attendance import make_router as attendance_router
+app.include_router(attendance_router(auth,db))
 
 from .settings_transfer import make_router as settings_router
 app.include_router(settings_router(auth,db,TypeInput,check_type,DICTIONARY,LOCAL_DICTIONARY))
@@ -306,7 +308,7 @@ app.include_router(readers_router(auth,db))
 @app.middleware('http')
 async def reader_private_responses(request:Request,call_next):
     response=await call_next(request)
-    if request.url.path.startswith(('/api/readers','/api/visits','/api/reader-branches','/api/circulation','/api/photo-transfer')):
+    if request.url.path.startswith(('/api/readers','/api/visits','/api/statistics/attendance','/api/reader-branches','/api/circulation','/api/photo-transfer')):
         response.headers['Cache-Control']='private, no-store'
         response.headers['X-Content-Type-Options']='nosniff'
         response.headers['Referrer-Policy']='no-referrer'

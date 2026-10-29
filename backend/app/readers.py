@@ -15,7 +15,7 @@ from .reader_core import *
 class ReaderInput(BaseModel):
     model_config=ConfigDict(extra='forbid')
     full_name:str=Field(min_length=1,max_length=300)
-    category:Literal['student','bachelor','specialist','master','doctoral','teacher','faculty','researcher','staff']='student'
+    category:Literal['student','bachelor','specialist','master','doctoral','teacher','faculty','researcher','staff','external']='student'
     status:Literal['active','blocked','suspended']='active'
     block_reason:str=Field(default='',max_length=1000)
     email:str=Field(default='',max_length=250)
@@ -368,7 +368,7 @@ class ReaderAccessLogFilter(logging.Filter):
     def filter(self,record):
         if isinstance(record.args,tuple) and len(record.args)>=3:
             args=list(record.args)
-            if isinstance(args[2],str) and args[2].startswith(('/api/readers','/api/visits')):
+            if isinstance(args[2],str) and args[2].startswith(('/api/readers','/api/visits','/api/statistics/attendance')):
                 args[2]=args[2].split('?',1)[0];record.args=tuple(args)
         return True
 logging.getLogger('uvicorn.access').addFilter(ReaderAccessLogFilter())

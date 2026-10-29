@@ -1,11 +1,8 @@
 <script setup lang="ts">
 import {ref,onMounted,onUnmounted,watch,nextTick} from 'vue';
 const props=defineProps<{api:(path:string,method?:string,body?:any)=>Promise<any>,can:(permission:string)=>boolean,initialCode?:string}>();
-const emit=defineEmits<{reader:[id:number]}>();
-const reportOpen=ref(false);
+const emit=defineEmits<{reader:[id:number];report:[]}>();
 const number=(n:number)=>new Intl.NumberFormat('ru-RU').format(n);
-function day(v:string){return v.split('-').reverse().join('.');}
-async function showReport(){reportOpen.value=!reportOpen.value;await nextTick();if(reportOpen.value)document.getElementById('visits-report')?.scrollIntoView({block:'start'});}
 async function turnPage(delta:number){if(busy.value)return;busy.value=true;error.value='';const previous=offset.value;offset.value=Math.max(0,previous+delta);try{await refresh();await nextTick();document.getElementById('visits-journal')?.scrollIntoView({block:'start'});}catch(e){offset.value=previous;error.value=String(e);}finally{busy.value=false;}}
 const code=ref(props.initialCode||''),branch=ref<number|null>(Number(localStorage.getItem('reader-visit-branch'))||null),notes=ref(''),branches=ref<any[]>([]),found=ref<any>(null),result=ref<any>(null),journal=ref<any>({items:[],total:0}),stats=ref<any>(null),offset=ref(0),busy=ref(false),error=ref(''),input=ref<HTMLInputElement|null>(null);let generation=0,timer:ReturnType<typeof setTimeout>;
 function dateTime(v:string){return new Date(v.endsWith('Z')||/[+-]\d\d:\d\d$/.test(v)?v:v+'Z').toLocaleString('ru-RU',{timeZone:'Asia/Almaty'});}
@@ -18,7 +15,7 @@ onMounted(async()=>{try{branches.value=(await props.api('/reader-branches')).fil
 </script>
 <template>
 <section class="visits-page" :aria-busy="busy">
-<div class="page-heading"><div><h1>Отметка посещений</h1><p>Сканирование читательского билета на входе. Визит фиксируется отдельно от книговыдачи — даже если читатель ничего не брал.</p></div><button v-if="can('visits.view')" :aria-expanded="reportOpen" @click="showReport">▥ Отчёт по посещаемости</button></div>
+<div class="page-heading"><div><h1>Отметка посещений</h1><p>Сканирование читательского билета на входе. Визит фиксируется отдельно от книговыдачи — даже если читатель ничего не брал.</p></div><button v-if="can('visits.view')" @click="emit('report')">▥ Отчёт по посещаемости</button></div>
 <p v-if="error" class="error visit-alert" role="alert">{{error}}</p>
 <div v-if="stats" class="visit-metrics">
 <article class="card"><span class="visit-metric-icon" aria-hidden="true">▣</span><div><strong>{{number(stats.today.visits)}}</strong><span>Посещений сегодня</span></div></article>
@@ -33,7 +30,7 @@ onMounted(async()=>{try{branches.value=(await props.api('/reader-branches')).fil
 </form>
 <div v-if="result" class="visit-alert success" role="status"><strong>{{result.duplicate?'Повторный скан: посещение уже учтено':'✓ Посещение зарегистрировано'}}</strong><p>{{result.full_name}} · {{dateTime(result.scanned_at)}}</p></div>
 <section v-if="can('visits.view')" id="visits-journal" class="card visit-journal"><div class="section-heading"><h2>Последние отметки</h2><span>{{number(journal.total)}} посещений</span></div><div class="visit-table-scroll"><table><thead><tr><th>Читатель</th><th>Время</th><th>Пункт обслуживания</th><th>Точка отметки</th><th>Отметил</th></tr></thead><tbody><tr v-for="v in journal.items" :key="v.id"><td><button class="visit-reader-link" v-if="can('readers.registry.view')" @click="emit('reader',v.reader_id)">{{v.full_name}}</button><strong v-else>{{v.full_name}}</strong><small class="mono">{{v.ticket_number}}</small></td><td>{{dateTime(v.scanned_at)}}</td><td>{{v.branch}}</td><td>{{({desk:'Рабочее место',kiosk:'Киоск',turnstile:'Турникет'} as any)[v.source]||v.source}}<small v-if="v.notes">{{v.notes}}</small></td><td>{{v.actor}}</td></tr><tr v-if="!journal.items.length"><td colspan="5" class="visit-empty"><strong>Посещений пока нет</strong><p>Здесь появятся отметки после сканирования читательских билетов.</p></td></tr></tbody></table></div><div class="table-footer"><span>{{journal.total?offset+1:0}}–{{Math.min(offset+50,journal.total)}} из {{number(journal.total)}}</span><div><button :disabled="busy||offset===0" @click="turnPage(-50)">← Назад</button><button :disabled="busy||offset+50>=journal.total" @click="turnPage(50)">Далее →</button></div></div></section>
-<section v-if="reportOpen&&stats" id="visits-report" class="card visit-report"><div class="section-heading"><div><h2>Отчёт по посещаемости</h2><p>Последние 7 дней · время Алматы</p></div><button @click="reportOpen=false">Закрыть отчёт</button></div><div class="visit-report-grid"><div><h3>Посещения по дням</h3><div class="visit-days"><div v-for="d in stats.days" :key="d.date"><span>{{day(d.date)}}</span><div class="visit-bar-track"><div :style="{width:(d.visits/Math.max(1,...stats.days.map((x:any)=>x.visits))*100)+'%'}"></div></div><strong>{{number(d.visits)}}</strong><small>{{d.unique}} читателей</small></div></div></div><div><h3>По пунктам обслуживания</h3><p v-if="!stats.branches.length" class="muted">За этот период посещений нет.</p><div v-for="b in stats.branches" :key="b.name" class="visit-branch-total"><span>{{b.name}}</span><strong>{{number(b.visits)}}</strong></div></div></div></section>
+
 </section>
 </template>
 <style scoped>

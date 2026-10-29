@@ -142,6 +142,7 @@ def permission_for(method,path):
     if path.startswith('/api/import/'): return 'import.run'
     if path in ('/api/dictionary','/api/types'): return 'catalog.view' if method=='GET' else 'settings.edit'
     if path.startswith('/api/types/'): return 'catalog.view' if method=='GET' else 'settings.edit'
+    if path.startswith('/api/statistics/attendance') and method=='GET': return 'visits.view'
     if path.startswith('/api/statistics/') and method=='GET': return 'statistics.view'
     if path.startswith('/api/ksu/'): return 'ksu.view' if method=='GET' else 'ksu.edit'
     if path.startswith('/api/acquisitions'): return 'acquisitions.view' if method=='GET' else ('acquisitions.cancel' if path.endswith('/cancel') else 'acquisitions.edit')

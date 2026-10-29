@@ -7,7 +7,7 @@ from sqlalchemy import select, func, or_
 from .db import utcnow
 from .reader_models import Reader, ReaderCounter, ReaderAudit, ReaderRateLimit, ReaderPhoto
 
-CATEGORIES={'student':'Студент','bachelor':'Бакалавр','specialist':'Специалист','master':'Магистрант','doctoral':'Докторант','teacher':'Преподаватель','faculty':'ППС','researcher':'Исследователь','staff':'Сотрудник'}
+CATEGORIES={'student':'Студент','bachelor':'Бакалавр','specialist':'Специалист','master':'Магистрант','doctoral':'Докторант','teacher':'Преподаватель','faculty':'ППС','researcher':'Исследователь','staff':'Сотрудник','external':'Внешний пользователь'}
 STATUSES={'active':'Активен','blocked':'Заблокирован','suspended':'Приостановлен'}
 PERSONAL={'iin','birth_date','gender_source'}
 TZ=ZoneInfo(os.getenv('LIBRARY_TIMEZONE','Asia/Almaty'))
@@ -48,7 +48,7 @@ def increment(s,name):
 def allocate_ticket(s,category,cohort,faculty):
     prefix=os.getenv('READER_TICKET_PREFIX','KazTBU')
     codes=json.loads(os.getenv('READER_FACULTY_CODES','{}'))
-    category_codes={'student':'U','bachelor':'B','specialist':'S','master':'M','doctoral':'D','teacher':'P','faculty':'P','researcher':'P','staff':'A'}
+    category_codes={'student':'U','bachelor':'B','specialist':'S','master':'M','doctoral':'D','teacher':'P','faculty':'P','researcher':'P','staff':'A','external':'E'}
     year=cohort or datetime.now(TZ).year
     namespace=f'{prefix}-{category_codes[category]}{year%100:02d}-{codes.get(faculty,"UNI")}'
     number=increment(s,'ticket:'+namespace); barcode=increment(s,'barcode')
