@@ -145,7 +145,12 @@ async function deleteRecord(){if(!deleteTarget.value?.id||busy.value)return;cons
 function title(r:RecordData){return r.marc.fields.find(f=>f.tag==='245')?.subfields?.filter(s=>s.code==='a').map(s=>s.value.trim()).filter(Boolean).join(' ')||'Без заглавия';}
 function udc(r:RecordData){return r.marc.fields.filter(f=>f.tag==='080').flatMap(f=>(f.subfields||[]).filter(s=>s.code==='a').map(s=>s.value.trim())).filter(Boolean).join('; ')||'—';}
 function author(r:RecordData){return r.marc.fields.find(f=>f.tag==='100')?.subfields?.find(s=>s.code==='a')?.value||'—';}
-function openMenu(e:MouseEvent,f:MF,sub?:SF){if(!can('catalog.edit'))return;e.preventDefault();menu.value={x:Math.max(8,Math.min(e.clientX,window.innerWidth-285)),y:Math.max(8,Math.min(e.clientY,window.innerHeight-235)),field:f,sub};}
+function openMenu(e:MouseEvent,f:MF,sub?:SF){
+  const target=e.target;
+  if(e.type==='contextmenu'&&target instanceof HTMLElement&&(target.closest('input,textarea,select')||target.isContentEditable)){menu.value=null;return;}
+  if(!can('catalog.edit'))return;
+  e.preventDefault();menu.value={x:Math.max(8,Math.min(e.clientX,window.innerWidth-285)),y:Math.max(8,Math.min(e.clientY,window.innerHeight-235)),field:f,sub};
+}
 function canRepeat(){if(!menu.value||technical(menu.value.field,menu.value.sub))return false;const {field,sub}=menu.value;return sub?!!specs.value[field.tag]?.subfields.find(s=>s.code===sub.code)?.repeatable:!!specs.value[field.tag]?.repeatable;}
 function canRemove(){if(!menu.value||technical(menu.value.field,menu.value.sub))return false;return menu.value.sub?!(required(menu.value.field)&&menu.value.field.subfields?.length===1):!required(menu.value.field);}
 function duplicate(){if(!menu.value||!canRepeat()||!editor.value)return;const {field,sub}=menu.value;if(sub){const i=field.subfields!.indexOf(sub);field.subfields!.splice(i+1,0,{...sub});expanded.value.add(uid(field));}else{const i=editor.value.marc.fields.indexOf(field);editor.value.marc.fields.splice(i+1,0,cloneField(field));}menu.value=null;}
