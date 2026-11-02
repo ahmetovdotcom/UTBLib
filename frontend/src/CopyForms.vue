@@ -29,7 +29,7 @@ function print(){if(ready.value&&!overflow.value){frame.value?.contentWindow?.fo
 <p v-if="error||layout.error" class="inline-error" role="alert">{{error||layout.error}}</p>
 <p v-if="!busy&&!error&&!copies.length">Нет действующих экземпляров для печати.</p>
 <p v-if="copies.length&&layout.value">Бланков: {{copies.length}} · До {{layout.value.perPage}} на листе · Листов: {{Math.ceil(copies.length/layout.value.perPage)}}.</p>
-<p>Слева вверху — полочный индекс (090$a), а если он отсутствует — УДК (080$a). Цена берётся из экземпляра; «—» означает, что она не указана.</p>
+<p>Слева вверху — полочный индекс (090$a), а если он отсутствует — УДК (080$a). Под ним — авторский знак (090$x), если он заполнен в карточке. Цена берётся из экземпляра; «—» означает, что она не указана.</p>
 <p v-if="overflow" role="alert" class="inline-error">Текст не помещается в один из бланков. Увеличьте ширину или высоту.</p>
 <p>В окне печати выберите A4, масштаб 100%, отключите колонтитулы браузера.</p>
 <div class="modal-actions"><button type="button" @click="dialog?.close()">Закрыть</button><button type="button" class="primary" :disabled="busy||!ready||overflow||!!layout.error||!copies.length" @click="print">Печатать / сохранить PDF</button></div>
