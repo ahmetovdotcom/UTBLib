@@ -205,6 +205,14 @@ class GostInput(Strict):
 def gost_preview(body:GostInput):
     return describe(body.marc.model_dump(exclude_none=True),body.kind)
 
+@app.get('/api/records/{id}/description',dependencies=[Depends(auth)])
+def record_description(id:int,s=Depends(db)):
+    record=s.get(Record,id)
+    if not record: raise HTTPException(404,'Запись не найдена')
+    leader=record.marc.get('leader','')
+    kind='component' if len(leader)>7 and leader[7] in ('a','b') else 'single'
+    return {'id':record.id,'version':record.version,**describe(record.marc,kind)}
+
 class VocabularyEntryInput(Strict):
     value: str=Field(min_length=1,max_length=1000)
     label: str=Field(default='',max_length=1000)
@@ -316,6 +324,9 @@ async def reader_private_responses(request:Request,call_next):
 
 from .circulation import make_router as circulation_router
 app.include_router(circulation_router(auth,db))
+
+from .circulation_statistics import make_router as circulation_statistics_router
+app.include_router(circulation_statistics_router(auth,db))
 
 from .catalog_attention import make_router as attention_router
 app.include_router(attention_router(auth,db,DICTIONARY,LOCAL_DICTIONARY))

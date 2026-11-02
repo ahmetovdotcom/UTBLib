@@ -149,7 +149,7 @@ def permission_for(method,path):
     if path.startswith('/api/withdrawals'): return 'withdrawals.view' if method=='GET' else 'withdrawals.create'
     if path.startswith('/api/copies/'): return 'catalog.view' if method=='GET' else 'copies.edit'
     if re.fullmatch(r'/api/records/\d+/copies',path): return 'catalog.view' if method=='GET' else 'copies.edit'
-    if path=='/api/records' or re.fullmatch(r'/api/records/\d+(?:/marcsql-source)?',path):
+    if path=='/api/records' or re.fullmatch(r'/api/records/\d+(?:/marcsql-source|/description)?',path):
         return 'catalog.view' if method=='GET' else ('catalog.delete' if method=='DELETE' else 'catalog.edit')
     if path in ('/api/gost/preview','/api/isbn-lookup'): return 'catalog.view'
     raise HTTPException(403,'Действие не разрешено')
