@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {nextTick, onUnmounted, ref} from 'vue';
-const props=defineProps<{recordId:number;api:(path:string)=>Promise<any>}>();
+import {descriptionForCopy,type DescriptionSource,type DescriptionApi} from './copyDescription';
+const props=defineProps<DescriptionSource & {api:DescriptionApi;label?:string;disabled?:boolean}>();
 const busy=ref(false),copied=ref(false),error=ref(''),text=ref('');
 const dialog=ref<HTMLDialogElement|null>(null),manual=ref<HTMLTextAreaElement|null>(null);
 let timer:ReturnType<typeof setTimeout>|undefined;
@@ -11,10 +12,8 @@ function legacyCopy(value:string){
  try{area.select();return document.execCommand('copy');}catch{return false;}finally{area.remove();active?.focus();}
 }
 async function copy(){
- if(busy.value)return;busy.value=true;copied.value=false;error.value='';text.value='';clearTimeout(timer);
- const content=props.api(`/records/${props.recordId}/description`).then(r=>{
-  const value=String(r.text||'').trim();if(!value)throw Error('В записи ещё нет данных для библиографического описания.');text.value=value;return value;
- });
+ if(busy.value||props.disabled)return;busy.value=true;copied.value=false;error.value='';text.value='';clearTimeout(timer);
+ const content=descriptionForCopy(props.api,props).then(value=>{text.value=value;return value;});
  // Safari requires clipboard.write during the click, before waiting for the API.
  try{
   let done=false;
@@ -31,8 +30,8 @@ async function copy(){
 }
 </script>
 <template>
-<div class="copy-description">
- <button type="button" :disabled="busy" :aria-label="'Копировать библиографическое описание записи №'+recordId" title="Копировать библиографическое описание" @click="copy">{{busy?'Копирование…':copied?'✓ Скопировано':'Копировать'}}</button>
+<div class="copy-description" :class="{'copy-description-full':!!marc}">
+ <button type="button" :disabled="busy||disabled" :aria-label="marc?'Копировать библиографическую запись':'Копировать библиографическое описание записи №'+recordId" title="Копировать библиографическое описание" @click="copy">{{busy?'Копирование…':copied?'✓ Скопировано':label||'Копировать'}}</button>
  <span class="sr-only" role="status">{{copied?'Библиографическое описание скопировано':''}}</span>
  <small v-if="error" role="alert">{{error}}</small>
  <dialog ref="dialog" class="modal card" aria-label="Копирование библиографического описания">
@@ -44,4 +43,5 @@ async function copy(){
 </template>
 <style scoped>
 .copy-description{display:inline-flex;flex-direction:column;gap:6px;align-items:flex-start}.copy-description>button{white-space:nowrap;font-size:12px;padding:8px 12px;min-height:34px}.copy-description>small{max-width:240px;color:#a23c32;font-size:12px}.copy-description dialog{width:min(700px,94vw);white-space:normal;text-align:left}.copy-description textarea{width:100%;margin:16px 0;line-height:1.6}
+.copy-description-full>button{font-size:14px;padding:12px 16px;min-height:44px}
 </style>

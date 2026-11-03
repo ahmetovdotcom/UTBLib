@@ -142,12 +142,17 @@ def test_permissions_and_no_personal_data(client):
 def test_saved_description_single_component_and_permissions(client):
     t=make_type(client);p=payload(t)
     p['marc']['fields'][0]['subfields'].append({'code':'c','value':'Тестовый автор'})
-    p['marc']['fields'] += [field('260','a','Алматы'),field('300','a','120 с.')]
+    p['marc']['fields'] += [{**field('100','a','Автор, Т.'),'ind1':'1'},field('260','a','Алматы'),field('300','a','120 с.')]
     created=client.post('/api/records',json=p);assert created.status_code==201,created.text
     id=created.json()['id'];url=f'/api/records/{id}/description'
     r=client.get(url);assert r.status_code==200
     assert 'Алматы' in r.json()['text'] and '120 с.' in r.json()['text'] and 'Тестовый автор' in r.json()['text']
-    assert r.json()['text']==client.post('/api/gost/preview',json={'marc':created.json()['marc'],'kind':'single'}).json()['text']
+    preview=client.post('/api/gost/preview',json={'marc':created.json()['marc'],'kind':'single'})
+    assert preview.status_code==200
+    assert r.json()['text']==preview.json()['text']
+    assert r.json()['record_text']==preview.json()['record_text']
+    assert r.json()['record_text'].startswith('Автор, Т. ')
+    assert client.get(f'/api/records/{id}').json()['marc']==created.json()['marc']
     gen=app.dependency_overrides[db]();s=next(gen)
     try:
         record=s.get(Record,id);marc=dict(record.marc);marc['leader']='00000naa a2200000   4500';marc['fields']=[*marc['fields'],field('773','t','Тестовый журнал')];record.marc=marc;s.commit()
@@ -156,5 +161,7 @@ def test_saved_description_single_component_and_permissions(client):
     assert client.get('/api/records/999999/description').status_code==404
     add_user(client,username='view',permissions=['catalog.view']);login(client,'view')
     assert client.get(url).status_code==200
+    assert client.post('/api/gost/preview',json={'marc':created.json()['marc'],'kind':'single'}).status_code==200
     login(client,'admin','test-secret');add_user(client,username='none',role='reader',permissions=['loans.view_own']);login(client,'none')
     assert client.get(url).status_code==403
+    assert client.post('/api/gost/preview',json={'marc':created.json()['marc'],'kind':'single'}).status_code==403
