@@ -139,6 +139,8 @@ def permission_for(method,path):
     if path.startswith('/api/visits'): return 'visits.record' if method=='POST' or path.endswith('/lookup') else 'visits.view'
     if path.startswith('/api/settings-transfer/'): return 'settings.edit'
     if path in ('/api/catalog-attention','/api/catalog-attention/options') and method=='GET': return 'catalog.view'
+    if path in ('/api/catalog-search/options','/api/catalog-search/values') and method=='GET': return 'catalog.view'
+    if path=='/api/catalog-search/records' and method=='POST': return 'catalog.view'
     if path.startswith('/api/import/'): return 'import.run'
     if path in ('/api/dictionary','/api/types'): return 'catalog.view' if method=='GET' else 'settings.edit'
     if path.startswith('/api/types/'): return 'catalog.view' if method=='GET' else 'settings.edit'
@@ -164,7 +166,7 @@ def auth(request:Request,s=Depends(get_db)):
         return None
     user=identity(request,s)
     permission=permission_for(request.method,request.url.path)
-    if (request.method not in ('GET','HEAD','OPTIONS') and request.url.path != '/api/book-photos/analyze'
+    if (request.method not in ('GET','HEAD','OPTIONS') and request.url.path not in ('/api/book-photos/analyze','/api/catalog-search/records')
             and not request.url.path.startswith('/api/photo-transfer/')):
         lock(s,'circulation-stock-gate')
     if permission=='circulation.options':

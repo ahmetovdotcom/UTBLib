@@ -1,6 +1,6 @@
 import json, os, secrets
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from fastapi import FastAPI, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from sqlalchemy import select, update, delete, or_, text
@@ -100,7 +100,7 @@ def create_type(body:TypeInput,s=Depends(db)): return save_type(body,s)
 def edit_type(id:int,body:TypeInput,s=Depends(db)): return save_type(body,s,id)
 def output(r): return {'id':r.id,'type_id':r.type_id,'version':r.version,'marc':r.marc}
 @app.get('/api/records',dependencies=[Depends(auth)])
-def records(q:str='',udc:str=Query('',max_length=150),type_id:int|None=None,offset:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100),s=Depends(db)):
+def records(q:str='',udc:str=Query('',max_length=150),type_id:int|None=None,offset:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100),conditions:str=Query('',max_length=8000),match:Literal['all','any']='all',s=Depends(db)):
     stmt=select(Record)
     q=q.strip()
     if q:
@@ -127,7 +127,16 @@ def records(q:str='',udc:str=Query('',max_length=150),type_id:int|None=None,offs
                 WHERE json_extract(f.value,'$.tag')='080' AND json_extract(sf.value,'$.code')='a'
                 AND ltrim(json_extract(sf.value,'$.value')) LIKE :udc_prefix ESCAPE '\\')"""
         stmt=stmt.where(text(clause).bindparams(udc_prefix=prefix))
+    from .catalog_search import parse_conditions, apply_conditions
+    stmt=apply_conditions(stmt,parse_conditions(conditions,DICTIONARY,LOCAL_DICTIONARY),match,s)
     return [output(r) for r in s.scalars(stmt.order_by(Record.id.desc()).offset(offset).limit(limit))]
+from .catalog_search import CatalogSearchInput
+@app.post('/api/catalog-search/records',dependencies=[Depends(auth)])
+def search_catalog(body:CatalogSearchInput,s=Depends(db)):
+    # A body avoids request-line limits for multiple terms or long annotations.
+    return records(q=body.q,udc=body.udc,type_id=body.type_id,offset=body.offset,limit=body.limit,
+                   conditions=json.dumps([c.model_dump() for c in body.conditions]),match=body.match,s=s)
+
 @app.get('/api/records/{id}',dependencies=[Depends(auth)])
 def record(id:int,s=Depends(db)):
     r=s.get(Record,id)
@@ -332,3 +341,6 @@ app.include_router(circulation_statistics_router(auth,db))
 
 from .catalog_attention import make_router as attention_router
 app.include_router(attention_router(auth,db,DICTIONARY,LOCAL_DICTIONARY))
+
+from .catalog_terms import make_router as catalog_terms_router
+app.include_router(catalog_terms_router(auth,db,DICTIONARY,LOCAL_DICTIONARY))
