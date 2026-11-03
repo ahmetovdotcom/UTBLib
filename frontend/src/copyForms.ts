@@ -1,4 +1,4 @@
-export type PrintCopy = {id:number;inventory_number:string;unit_price:string|number|null;currency:string;status:string};
+export type PrintCopy = {id:number;inventory_number:string;barcode?:string|null;unit_price:string|number|null;currency:string;status:string};
 type Field = {tag:string;ind2?:string;subfields?:{code:string;value:string}[]};
 export type FormBook = {index:string;authorMark:string;author:string;title:string;year:string};
 export function formBook(record:{marc:{fields:Field[]}}):FormBook {
@@ -17,6 +17,12 @@ export async function loadFormCopies(api:(path:string)=>Promise<any>,recordId:nu
   if(!page.items.length)throw new Error('Список экземпляров изменился. Откройте печать повторно.');
  }
  return [...result.values()];
+}
+export function selectedFormCopies(copies:PrintCopy[],ids:ReadonlySet<number>):PrintCopy[]{
+ return copies.filter(c=>c.status==='active'&&ids.has(c.id));
+}
+export function filterFormCopies(copies:PrintCopy[],query:string):PrintCopy[]{
+ const q=query.trim().toLocaleLowerCase();return copies.filter(c=>(c.inventory_number+' '+(c.barcode||'')).toLocaleLowerCase().includes(q));
 }
 export function formLayout(width:number,height:number,columns:number){
  if(!Number.isFinite(width)||!Number.isFinite(height)||!Number.isInteger(columns)||width<35||height<70||width>190||height>277||columns<1||columns>4)throw new Error('Размер: ширина 35–190 мм, высота 70–277 мм; столбцов от 1 до 4.');

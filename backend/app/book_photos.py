@@ -123,10 +123,11 @@ confidence: clear или uncertain. warnings и пояснения evidence пи
 
 
 def configured_fields(config, official, local):
+    from .repeatability import configured_spec
     result = {}
     for cfg in config:
         tag = cfg['tag']
-        spec = (local if cfg.get('local') else official).get(tag, {})
+        spec = configured_spec((local if cfg.get('local') else official).get(tag, {}), cfg)
         for sf in spec.get('subfields', []):
             key = tag + '$' + sf['code']
             if key not in FIELDS or (cfg.get('subfields') and sf['code'] not in cfg['subfields']):

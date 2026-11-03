@@ -2,7 +2,7 @@ import json, os, secrets
 from pathlib import Path
 from typing import Annotated
 from fastapi import FastAPI, Depends, Header, HTTPException, Query, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from sqlalchemy import select, update, delete, or_, text
 from sqlalchemy.exc import IntegrityError
 from .db import Session, DocumentType, Record, VocabularyEntry, MarcsqlSource, RecordCreation, AcquisitionLine, Copy
@@ -27,6 +27,8 @@ class VocabularyConfig(Strict):
     auto_add: bool=False
     allow_edit: bool=False
 class ConfigField(Strict):
+    repeatable: StrictBool|None=None
+    subfield_repeatable: dict[str,StrictBool]=Field(default_factory=dict)
     vocabularies: dict[str,VocabularyConfig]=Field(default_factory=dict)
     tag: str=Field(pattern=r'^\d{3}$')
     label: str=''

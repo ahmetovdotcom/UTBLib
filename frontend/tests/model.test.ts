@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {reactive} from 'vue';
-import {makeField,prepareRecord,cleanRecord,cloneField,type DT,type RecordData,type Spec} from '../src/catalog.ts';
+import {makeField,prepareRecord,cleanRecord,cloneField,configuredSpec,codesFor,type Config,type DT,type RecordData,type Spec} from '../src/catalog.ts';
 const data=JSON.parse(readFileSync(new URL('../../data/marc21.json',import.meta.url),'utf8'));
 const specs:Record<string,Spec>=Object.fromEntries(data.fields.map((f:Spec)=>[f.tag,f]));
 const cfg=(tag:string,required=false,subfields:string[]=[])=>({tag,label:'',required,subfields});
@@ -67,4 +67,24 @@ test('ISBN insertion preserves unchecked values and merges repeated authors and 
  insertIsbn(rows,r.marc.fields,[true,true,true,true,true],tag=>makeField(specs[tag],cfg(tag)));
  assert.equal(r.marc.fields.filter(f=>f.tag==='700').length,2);
  assert.equal(r.marc.fields.find(f=>f.tag==='245')!.subfields![0].value,'New title');
+});
+
+test('Worksheet repeat rules override fields and subfields without mutating MARC defaults',()=>{
+ const config:Config={...cfg('245'),repeatable:true,subfield_repeatable:{a:true,b:false}};
+ const effective=configuredSpec(specs['245'],config);
+ assert.equal(effective.repeatable,true);assert.equal(effective.subfields.find(s=>s.code==='a')!.repeatable,true);
+ assert.equal(effective.subfields.find(s=>s.code==='b')!.repeatable,false);
+ assert.equal(specs['245'].repeatable,false);assert.equal(specs['245'].subfields.find(s=>s.code==='a')!.repeatable,false);
+ assert.equal(configuredSpec(specs['245'],cfg('245')).repeatable,false);
+ assert.equal(configuredSpec(specs['001'],{...cfg('001'),repeatable:true}).repeatable,false);
+ const local990={...specs['245'],tag:'990',local:true,subfields:[{code:'f',label:'Дата',repeatable:false},{code:'w',label:'Источник',repeatable:false}]};
+ const safe=configuredSpec(local990,{...cfg('990'),local:true,repeatable:true,subfield_repeatable:{f:true,w:true}});
+ assert.equal(safe.repeatable,false);assert.deepEqual(safe.subfields.map(s=>s.repeatable),[false,true]);
+});
+test('Disabling a repeated slot hides extra empty placeholders but preserves stored values',()=>{
+ const config:Config={...cfg('653',false,['a','a','a']),subfield_repeatable:{a:false}};
+ assert.deepEqual(codesFor(specs['653'],config),['a']);
+ const r=record();r.marc.fields=[{tag:'653',ind1:'1',ind2:' ',subfields:[{code:'a',value:'История'},{code:'a',value:'Философия'}]}];
+ prepareRecord(r,{id:1,name:'Тест',config:[config]},specs);
+ assert.deepEqual(cleanRecord(r).marc.fields[0].subfields,[{code:'a',value:'История'},{code:'a',value:'Философия'}]);
 });

@@ -90,7 +90,7 @@ def definitions(official):
         source=deepcopy(official.get(tag,{}))
         source.update(tag=tag,label=label,local=True,obsolete=False,repeatable=repeat,
                       documentation='Локальный профиль MARCSQL по рабочему листу пользователя. Не является определением официального MARC21.')
-        source['subfields']=[{'code':code,'label':name,'repeatable':code=='a' and tag in ('041','653'),'obsolete':False} for code,name in subs]
+        source['subfields']=[{'code':code,'label':name,'repeatable':(code=='a' and tag in ('041','653')) or (tag=='952' and code=='j'),'obsolete':False} for code,name in subs]
         if tag in ('090','097','952','990') or tag not in official:
             source['indicators']=[] if int(tag)<10 else [{'position':i,'label':'Не определён','values':[{'code':' ','label':'Пробел'}]} for i in (1,2)]
         result[tag]=source

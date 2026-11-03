@@ -2,7 +2,7 @@ import {toRaw} from 'vue';
 export type SF={code:string,value:string};
 export type MF={tag:string,value?:string,ind1?:string,ind2?:string,subfields?:SF[]};
 export type Spec={local?:boolean,tag:string,label:string,repeatable:boolean,obsolete:boolean,documentation:string,indicators:{position:number,label:string,values:{code:string,label:string}[]}[],subfields:{code:string,label:string,repeatable:boolean}[]};
-export type Config={vocabularies?:Record<string,{auto_add:boolean,allow_edit?:boolean}>,local?:boolean,tag:string,label:string,required:boolean,subfields:string[]};
+export type Config={repeatable?:boolean|null,subfield_repeatable?:Record<string,boolean>,vocabularies?:Record<string,{auto_add:boolean,allow_edit?:boolean}>,local?:boolean,tag:string,label:string,required:boolean,subfields:string[]};
 export type DT={id:number,name:string,config:Config[]};
 export type RecordData={id?:number,type_id:number,version?:number,marc:{leader:string,fields:MF[]}};
 // UI-only empty rows never overwrite a stored MARC field or enter the saved record.
@@ -14,7 +14,12 @@ export const common:Record<string,string[]>={
  '490':['a','v'],'500':['a'],'504':['a'],'520':['a'],'650':['a','x','y','z'],'653':['a'],
  '700':['a','d','e'],'710':['a','b'],'773':['t','g','x','w'],'856':['u','y','z']
 };
-export function codesFor(spec:Spec,cfg:Config){return cfg.subfields.length?cfg.subfields:(common[spec.tag]||spec.subfields.filter(s=>!/[Oo][Bb][Ss][Oo][Ll][Ee][Tt][Ee]/.test(s.label)).map(s=>s.code));}
+export function repetitionLocked(tag:string,code?:string,local=false){return ['000','001','005','008'].includes(tag)||(tag==='990'&&local&&(!code||['d','e','f'].includes(code)));}
+export function configuredSpec(spec:Spec,cfg:Config):Spec{
+ return {...spec,repeatable:repetitionLocked(cfg.tag,undefined,!!cfg.local)?false:cfg.repeatable??spec.repeatable,
+  subfields:spec.subfields.map(s=>({...s,repeatable:repetitionLocked(cfg.tag,s.code,!!cfg.local)?false:cfg.subfield_repeatable?.[s.code]??s.repeatable}))};
+}
+export function codesFor(spec:Spec,cfg:Config){return cfg.subfields.length?cfg.subfields.filter((code,i,all)=>cfg.subfield_repeatable?.[code]!==false||all.indexOf(code)===i):(common[spec.tag]||spec.subfields.filter(s=>!/[Oo][Bb][Ss][Oo][Ll][Ee][Tt][Ee]/.test(s.label)).map(s=>s.code));}
 export function makeSubfield(code:string,value=''){const s={code,value};generatedSubfields.add(s);return s;}
 export function makeField(spec:Spec,cfg:Config):MF{
  const f:MF=Number(spec.tag)<10?{tag:spec.tag,value:''}:{tag:spec.tag,ind1:spec.indicators.find(i=>i.position===1)?.values[0]?.code||' ',ind2:spec.indicators.find(i=>i.position===2)?.values[0]?.code||' ',subfields:codesFor(spec,cfg).map(code=>makeSubfield(code,spec.tag==='084'&&code==='2'?'rubbk':''))};
