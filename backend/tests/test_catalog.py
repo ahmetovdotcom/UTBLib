@@ -254,3 +254,64 @@ def test_legacy_blank_exception_is_position_specific():
     modified['fields'][0].update(ind1='0',ind2=' ')
     errors,_=validate_marc(modified,[],DICTIONARY,previous=original)
     assert errors==["245: invalid indicator 2: ' '"]
+
+
+@pytest.mark.parametrize('local',[False,True])
+def test_edit_imported_blank_series_indicator_preserves_source(client,local):
+    config=[{'tag':'245','required':True,'local':local}, {'tag':'440','local':local}]
+    type_id=client.post('/api/types',json={'name':'Legacy series','config':config}).json()['id']
+    item='24510\x1faСтарое заглавие\x1e440  \x1faУчебная серия\x1fv3'
+    imported=client.post('/api/import/marcsql',json={
+        'source':'regression-series','doc_id':1,'type_id':type_id,
+        'rectype':'a','biblevel':'m','item':item,'preview':False,
+    })
+    assert imported.status_code==200,imported.text
+    record_id=imported.json()['record_id']
+    endpoint=f'/api/records/{record_id}'
+    saved=client.get(endpoint).json()
+    body={k:saved[k] for k in ('type_id','version','marc')}
+    next(f for f in body['marc']['fields'] if f['tag']=='245')['subfields'][0]['value']='Уточнённое заглавие'
+    series=next(f for f in body['marc']['fields'] if f['tag']=='440')
+    assert series['ind2']==' '
+    updated=client.put(endpoint,json=body)
+    assert updated.status_code==200,updated.text
+    result=updated.json()
+    assert result['marc']==body['marc']
+    assert any(w.startswith('440:') and 'пустой индикатор 2' in w for w in result['warnings'])
+    assert client.get(endpoint+'/marcsql-source').json()['item']==item
+    body['version']=result['version']
+    # A saved legacy blank does not authorize another invalid occurrence.
+    duplicate=copy.deepcopy(body)
+    duplicate['marc']['fields'].append(copy.deepcopy(series))
+    assert client.put(endpoint,json=duplicate).status_code==422
+    # Explicit correction is retained, including a nonzero value.
+    series['ind2']='4'
+    corrected=client.put(endpoint,json=body)
+    assert corrected.status_code==200,corrected.text
+    assert next(f for f in corrected.json()['marc']['fields'] if f['tag']=='440')['ind2']=='4'
+    body['version']=corrected.json()['version']
+    series['ind2']=' '
+    assert client.put(endpoint,json=body).status_code==422
+
+
+@pytest.mark.parametrize('ind1,ind2',[(' ',' '),(' ','x'),('1','0')])
+def test_new_series_indicators_remain_strict(client,ind1,ind2):
+    body=payload(make_type(client))
+    series=field('440',value='Новая серия')
+    series.update(ind1=ind1,ind2=ind2)
+    body['marc']['fields'].append(series)
+    assert client.post('/api/records',json=body).status_code==422
+
+
+def test_legacy_blank_allowance_does_not_cross_fields_or_positions():
+    original=payload(1)['marc']
+    original['fields'].append(field('440',value='Серия'))
+    modified=copy.deepcopy(original)
+    modified['fields'][0]['ind2']=' '
+    modified['fields'][1]['ind2']='0'
+    assert validate_marc(modified,[],DICTIONARY,previous=original)[0]==["245: invalid indicator 2: ' '"]
+    # The valid blank first indicator of 440 cannot authorize a new blank second indicator.
+    original['fields'][1]['ind2']='0'
+    modified=copy.deepcopy(original)
+    modified['fields'][1]['ind2']=' '
+    assert validate_marc(modified,[],DICTIONARY,previous=original)[0]==["440: invalid indicator 2: ' '"]
