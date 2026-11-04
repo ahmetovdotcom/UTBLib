@@ -27,6 +27,7 @@ test -s .env.server && test -s .env.readers
 python3 deploy/configure-student-frontend.py --library "$library_dir"
 uc config --quiet
 lc config --quiet
+lc config --format json | python3 deploy/check-staff-proxy.py --library "$library_dir"
 # This alias and network already exist on the target host; fail rather than alter networking.
 lc exec -T app curl -fsS --max-time 10 http://utblib-web/api/health </dev/null
 
@@ -89,6 +90,16 @@ curl -fsS --retry 5 --retry-connrefused --retry-delay 2 http://127.0.0.1:8097/ap
 lc exec -T app curl -fsS --max-time 10 http://utblib-web/api/health </dev/null
 lc exec -T app curl -fsS --max-time 15 \
   --resolve elibrary.kaztbu.edu.kz:443:127.0.0.1 https://elibrary.kaztbu.edu.kz/login -o /dev/null </dev/null
+staff_page=$(lc exec -T app curl -fsS --max-time 15 http://utblib-web/ </dev/null)
+staff_https_page=$(lc exec -T app curl -fsS --max-time 15 \
+  --resolve libstaff.kaztbu.edu.kz:443:127.0.0.1 https://libstaff.kaztbu.edu.kz/ </dev/null)
+if [ -z "$staff_page" ] || [ "$staff_page" != "$staff_https_page" ]; then
+  echo 'Staff domain does not serve the UTBLib frontend. Check the libstaff nginx configuration.' >&2
+  exit 1
+fi
+lc exec -T app curl -fsS --max-time 15 \
+  --resolve libstaff.kaztbu.edu.kz:443:127.0.0.1 https://libstaff.kaztbu.edu.kz/api/health </dev/null
+echo 'Staff HTTPS routing: OK'
 lc exec -T app php scripts/check-utblib-frontend.php </dev/null
 # Only this run's disposable Git archive and npm packages; backups stay intact.
 docker run --rm --network none -v "$release_dir/library-source:/build" node:22-bookworm-slim \

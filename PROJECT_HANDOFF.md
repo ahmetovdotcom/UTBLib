@@ -1,5 +1,12 @@
 # UTBLib — передача проекта следующему ИИ-агенту
 
+04.11.2026 после первого production-обновления восстановлены nginx mounts в
+серверном library/docker-compose.yml: libstaff.conf и block-catalog-client.conf.
+Без них libstaff попадал в wildcard-виртуальный хост студенческого сайта.
+Маршрут восстановлен через nginx reload, БД и env не менялись. Скрипт активации
+теперь проверяет mounts до обновления и соответствие HTML staff-домена UTBLib
+через HTTPS после него. Серверные proxy-файлы остаются вне Git library.
+
 Подготовка production 04.11.2026: см. `docs/PRODUCTION_STUDENT_FRONTEND.md`.
 `deploy/activate-student-frontend.sh` обновляет действующие Compose-проекты после pull,
 сохраняя env/прокси/volumes, создаёт backups и переносит опубликованный контент из

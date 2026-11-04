@@ -54,6 +54,22 @@ SH
 
 ## Применить релиз
 
+В `library/docker-compose.yml` сервис **app** должен сохранять серверные mounts:
+
+```yaml
+    volumes:
+      - ./:/app:cached
+      - ./docker/libstaff.conf:/etc/nginx/conf.d/libstaff.conf:ro
+      - ./docker/block-catalog-client.conf:/etc/nginx/conf.d/block-catalog-client.conf:ro
+```
+
+Последний mount нужен, если этот файл ограничений есть на сервере. Сам по себе
+mount проекта в `/app` не подключает nginx-конфигурацию. Без `libstaff.conf`
+домен сотрудников перехватывает общий `*.kaztbu.edu.kz` публичного сайта.
+Preflight проверяет mounts до изменения окружения и пересоздания контейнеров;
+после обновления HTML `libstaff` через HTTPS сравнивается с прямым ответом UTBLib.
+Одной проверки внутреннего `/api/health` недостаточно.
+
 ```bash
 cd /home/admtutor/projects/UTBLib
 bash deploy/activate-student-frontend.sh /home/admtutor/projects/library
