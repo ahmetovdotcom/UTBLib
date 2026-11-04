@@ -19,6 +19,8 @@ from .db import get_db as db
 app.include_router(security_router)
 from .public_catalog import router as public_catalog_router
 app.include_router(public_catalog_router)
+from .student_bridge import router as student_bridge_router
+app.include_router(student_bridge_router)
 from .site_content import staff_router as site_staff_router, public_router as site_public_router
 app.include_router(site_staff_router)
 app.include_router(site_public_router)

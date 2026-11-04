@@ -109,6 +109,11 @@ def test_every_protected_business_route_has_permission():
     PUBLIC_PATHS = PUBLIC_PATHS | CONTENT_PATHS
     for route in app.routes:
         path=getattr(route,'path','')
+        if path in ('/api/student/v1/me', '/api/student/v1/photo'):
+            from app.student_bridge import authenticated_reader
+            assert route.methods == {'GET'}
+            assert any(d.call is authenticated_reader for d in route.dependant.dependencies)
+            continue
         if path in PUBLIC_PATHS:
             assert route.methods == {'GET'}
             continue

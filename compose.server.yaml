@@ -23,6 +23,7 @@ services:
       ADMIN_KEY: ${ADMIN_KEY:?Run deploy/init.sh}
       ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD:?Run deploy/init.sh}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      STUDENT_BRIDGE_KEY: ${STUDENT_BRIDGE_KEY:-}
       MARC_PATH: /data/marc21.json
       GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}

@@ -164,7 +164,7 @@ class Search(BaseModel):
     language: str = Field('', max_length=10)
     page: int = Field(1, ge=1, le=1000000)
     limit: int = Field(24, ge=1, le=100)
-    sort: str = Field('popular', pattern='^(popular|newest|oldest|title|author)$')
+    sort: str = Field('popular', pattern='^(popular|newest|oldest|title|author|recently_added)$')
     year_from: int | None = Field(None, ge=1400, le=2100)
     year_to: int | None = Field(None, ge=1400, le=2100)
     available_only: bool = False
@@ -216,6 +216,8 @@ def search(s, p):
         rows.append(b)
     if p.sort in ('newest', 'oldest'):
         rows.sort(key=lambda b: (b['publicationYear'] is None, (b['publicationYear'] or 0) * (-1 if p.sort == 'newest' else 1), b['_id']))
+    elif p.sort == 'recently_added':
+        rows.sort(key=lambda b: b['_id'], reverse=True)
     elif p.sort == 'popular':
         rows.sort(key=lambda b: (-stock.get(b['_id'], {}).get('issues', 0), b['title']['display'].casefold(), b['_id']))
     else:
