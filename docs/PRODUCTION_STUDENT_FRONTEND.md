@@ -5,6 +5,20 @@
 Проверены Compose labels: UTBLib использует server + readers + circulation,
 library — **docker-compose.yml**, а не docker-compose.prod.yml.
 
+Git remote на этом сервере: UTBLib — `origin`, library — **`amir`**.
+`origin` в library указывает на старый `kazutb-dev/digital-library-kazutb`.
+Публичный UTBLib скачивается через HTTPS без GitHub-пароля. Для приватного
+library нужен отдельный доступ. На сервере создан read-only deploy key через
+локальный `core.sshCommand`, однако 04.11 GitHub отклонил SSH-аутентификацию:
+успешный доступ к `amir` пока не подтверждён. Перед обычным обновлением проверьте
+`git ls-remote amir refs/heads/audit`; при ошибке не продолжайте `pull`.
+
+Для текущего выпуска коммит `16c4deb` можно передать с доверенного checkout через
+`git bundle`, проверить на сервере и загрузить в `amir/audit` без изменения
+рабочих файлов. После такой подготовки вместо `git pull --ff-only amir audit`
+используется `git merge --ff-only amir/audit`. Это разовый способ доставки,
+он не исправляет SSH-доступ для будущих обновлений.
+
 ## Обновить Git, сохранив настройки прокси
 
 Выполнить каждый блок целиком. При ошибке остановиться, не переходить к следующему.
@@ -33,7 +47,7 @@ if ! git diff --quiet HEAD -- docker-compose.yml; then
   git stash push -m 'library proxy before student frontend' -- docker-compose.yml
   saved=$(git rev-parse refs/stash)
 fi
-git pull --ff-only origin audit </dev/null
+git pull --ff-only amir audit </dev/null
 if [ -n "$saved" ]; then git stash apply "$saved"; fi
 SH
 ```
