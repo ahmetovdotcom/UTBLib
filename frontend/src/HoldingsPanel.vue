@@ -7,7 +7,8 @@ const props=defineProps<{canEdit:boolean,recordId:number,title:string,api:(path:
 const copies=ref<any[]>([]),total=ref(0),active=ref(0),onLoan=ref(0),matched=ref(0),offset=ref(0),query=ref(''),busy=ref(false),error=ref(''),notice=ref('');
 const existingDialog=ref<HTMLDialogElement|null>(null),copyDialog=ref<HTMLDialogElement|null>(null),draft=ref<any>(null),copyDraft=ref<any>(null),history=ref<any[]>([]);
 const pending=ref<any>(null),ksuEntries=ref<any[]>([]);
-async function loadKsu(){ksuEntries.value=(await props.api('/copies/ksu-options')).items;}
+const fieldOptions=ref<{sigla:string[],source:string[]}>({sigla:[],source:[]});
+async function loadOptions(){const [ksu,fields]=await Promise.all([props.api('/copies/ksu-options'),props.api('/copies/field-options')]);ksuEntries.value=ksu.items;fieldOptions.value=fields;}
 function copyValues(c:any){return {inventory_number:c.inventory_number,barcode:c.barcode,sigla:c.sigla,unit_price:c.unit_price===''||c.unit_price===null?null:c.unit_price,currency:c.currency,received_on:c.received_on||null,source:c.source,invoice:c.invoice||'',ksu_entry_id:c.ksu_entry_id||null,checked_on:c.checked_on||null,note:c.note};}
 const availabilityLabels:Record<string,string>={available:'В библиотеке',on_loan:'На руках',reserved:'Забронирован',withdrawn:'Списан',cancelled:'Отменён',lost:'Утрачен',repair:'В ремонте',processing:'На обработке',transfer:'В перемещении',display:'На выставке',reserve_stock:'Резервный фонд',unavailable:'Недоступен'};
 function issuedDate(value:string){return new Date(/[Zz]|[+-]\d\d:\d\d$/.test(value)?value:value+'Z').toLocaleDateString('ru-RU',{timeZone:'Asia/Almaty'});}
@@ -15,7 +16,7 @@ function lockReason(c:any){return c.availability==='on_loan'?'Сначала о�
 function today(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 async function load(){const id=props.recordId;const c=await props.api(`/records/${id}/copies?offset=${offset.value}&q=${encodeURIComponent(query.value)}`);if(id!==props.recordId)return;copies.value=c.items;total.value=c.total;active.value=c.active;onLoan.value=c.on_loan||0;matched.value=c.matched;}
 async function run(fn:()=>Promise<void>){if(busy.value)return;busy.value=true;error.value='';try{await fn();}catch(e){error.value=e instanceof Error?e.message:String(e);}finally{busy.value=false;}}
-async function openExisting(){await run(async()=>{await loadKsu();draft.value={request_key:crypto.randomUUID(),inventory_number:'',barcode:'',sigla:'',unit_price:'',currency:'KZT',received_on:today(),source:'',invoice:'',ksu_entry_id:null,checked_on:'',note:''};await nextTick();existingDialog.value?.showModal();});}
+async function openExisting(){await run(async()=>{await loadOptions();draft.value={request_key:crypto.randomUUID(),inventory_number:'',barcode:'',sigla:'',unit_price:'',currency:'KZT',received_on:today(),source:'',invoice:'',ksu_entry_id:null,checked_on:'',note:''};await nextTick();existingDialog.value?.showModal();});}
 function forget(){authStorage.removeItem('pending-existing-copy');pending.value=null;}
 async function postExisting(operation:any){
  authStorage.setItem('pending-existing-copy',JSON.stringify(operation));pending.value=operation;
@@ -25,7 +26,7 @@ async function postExisting(operation:any){
 }
 async function submitExisting(){await run(async()=>{await postExisting({record_id:props.recordId,body:{request_key:draft.value.request_key,...copyValues(draft.value)}});});}
 async function retry(){await run(async()=>{await postExisting(pending.value);});}
-async function openCopy(c:any){await run(async()=>{await loadKsu();copyDraft.value={...c,invoice:c.invoice||'',unit_price:c.unit_price??''};history.value=[];await nextTick();copyDialog.value?.showModal();});}
+async function openCopy(c:any){await run(async()=>{await loadOptions();copyDraft.value={...c,invoice:c.invoice||'',unit_price:c.unit_price??''};history.value=[];await nextTick();copyDialog.value?.showModal();});}
 async function saveCopy(){await run(async()=>{const c=copyDraft.value;await props.api('/copies/'+c.id,'PUT',{version:c.version,...copyValues(c)});copyDialog.value?.close();copyDraft.value=null;notice.value='Данные экземпляра сохранены. Итоги КСУ пересчитаны.';await load();});}
 async function showHistory(){history.value=await props.api('/copies/'+copyDraft.value.id+'/history');}
 function onUnload(e:BeforeUnloadEvent){if(draft.value||copyDraft.value){e.preventDefault();e.returnValue='';}}
@@ -52,12 +53,12 @@ onMounted(()=>window.addEventListener('beforeunload',onUnload));onUnmounted(()=>
 <dialog ref="existingDialog" class="modal card acquisition-dialog" aria-labelledby="existing-title" @cancel="busy?$event.preventDefault():draft=null" @close="draft=null">
 <form v-if="draft" @submit.prevent="submitExisting"><h2 id="existing-title">Создать экземпляр</h2><p>{{title}}</p>
 <fieldset :disabled="busy||!!pending" class="plain-fieldset acquisition-grid">
-<CopyFields :draft="draft" :entries="ksuEntries" creating />
+<CopyFields :draft="draft" :entries="ksuEntries" :field-options="fieldOptions" creating />
 </fieldset><p v-if="error" role="alert" class="inline-error">{{error}}</p>
 <div class="modal-actions"><button type="button" :disabled="busy" @click="existingDialog?.close()">Отмена</button><button v-if="pending" type="button" :disabled="busy" @click="retry">Повторить подтверждение</button><button v-else class="primary" :disabled="busy">Создать экземпляр</button></div></form>
 </dialog>
 <dialog ref="copyDialog" class="modal card acquisition-dialog" aria-labelledby="copy-title" @cancel="busy?$event.preventDefault():copyDraft=null" @close="copyDraft=null">
- <form v-if="copyDraft" @submit.prevent="saveCopy"><h2 id="copy-title">Экземпляр №{{copyDraft.id}}</h2><p>{{title}}<span v-if="copyDraft.acquisition_id"> · Поступление №{{copyDraft.acquisition_id}}</span></p><fieldset :disabled="busy" class="plain-fieldset acquisition-grid"><CopyFields :draft="copyDraft" :entries="ksuEntries" /></fieldset><button type="button" :disabled="busy" @click="run(showHistory)">История изменений</button><ul><li v-for="h in history">{{h.created_at}} · версия {{h.after.version}}<details><summary>Что изменилось</summary><pre>{{JSON.stringify({до:h.before,после:h.after},null,2)}}</pre></details></li></ul><p v-if="error" class="inline-error" role="alert">{{error}}</p><div class="modal-actions"><button type="button" :disabled="busy" @click="copyDialog?.close()">Отмена</button><button class="primary" :disabled="busy">Сохранить экземпляр</button></div></form>
+ <form v-if="copyDraft" @submit.prevent="saveCopy"><h2 id="copy-title">Экземпляр №{{copyDraft.id}}</h2><p>{{title}}<span v-if="copyDraft.acquisition_id"> · Поступление №{{copyDraft.acquisition_id}}</span></p><fieldset :disabled="busy" class="plain-fieldset acquisition-grid"><CopyFields :draft="copyDraft" :entries="ksuEntries" :field-options="fieldOptions" /></fieldset><button type="button" :disabled="busy" @click="run(showHistory)">История изменений</button><ul><li v-for="h in history">{{h.created_at}} · версия {{h.after.version}}<details><summary>Что изменилось</summary><pre>{{JSON.stringify({до:h.before,после:h.after},null,2)}}</pre></details></li></ul><p v-if="error" class="inline-error" role="alert">{{error}}</p><div class="modal-actions"><button type="button" :disabled="busy" @click="copyDialog?.close()">Отмена</button><button class="primary" :disabled="busy">Сохранить экземпляр</button></div></form>
 </dialog>
 </template>
 

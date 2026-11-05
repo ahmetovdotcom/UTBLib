@@ -209,6 +209,14 @@ def make_router(auth,db):
         from .ksu_data import entries_query, entry_output
         return {'items':[entry_output(e) for e in s.scalars(entries_query().order_by(KsuEntry.year.desc(),KsuEntry.number.desc()))]}
 
+    @router.get('/copies/field-options')
+    def copy_field_options(s=Depends(db)):
+        # Read saved copies across the whole catalogue, including imported stock.
+        # Fetch distinct values only; do not load copies or modify their spelling.
+        return {name:sorted({v.strip() for v in s.scalars(select(column).distinct()) if v and v.strip()},
+                            key=lambda v:(v.casefold(),v))
+                for name,column in (('sigla',Copy.sigla),('source',Copy.source))}
+
     @router.post('/records/{id}/copies',status_code=201)
     def create_existing_copy(id:int,body:ExistingCopyInput,s=Depends(db)):
         key=str(body.request_key);hashed=digest({'record_id':id,**body.model_dump(mode='json',exclude={k for k in ('invoice','ksu_entry_id') if k not in body.model_fields_set})})

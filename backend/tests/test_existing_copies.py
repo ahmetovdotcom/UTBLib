@@ -55,6 +55,28 @@ def test_new_description_quantity_does_not_implicitly_create_acquisition(client)
     assert client.get('/api/acquisitions').json()['total']==0
 
 
+def test_copy_dictionaries_use_saved_values_across_records_and_refresh_after_edits(client):
+    options='/api/copies/field-options'
+    assert client.get(options).json()=={'sigla':[],'source':[]}
+    assert client.get(options,headers={'X-Admin-Key':'bad'}).status_code==401
+    t=make_type(client)
+    a=save(client,payload(t))['id'];b=save(client,payload(t))['id']
+    c=client.post(f'/api/records/{a}/copies',json=body(sigla='  АБ1  ',source='  Дар  ')).json()
+    client.post(f'/api/records/{b}/copies',json=body(inventory_number='SECOND',barcode='SECOND',sigla='АБ1',source='Дар'))
+    client.post(f'/api/records/{b}/copies',json=body(inventory_number='EMPTY',barcode='EMPTY',sigla=' ',source=' '))
+    assert client.get(options).json()=={'sigla':['АБ1'],'source':['Дар']}
+    update={k:c[k] for k in ('version','inventory_number','barcode')}
+    update.update(sigla='Читальный зал',source='Закупка')
+    changed=client.put(f"/api/copies/{c['id']}",json=update)
+    assert changed.status_code==200,changed.text
+    assert client.get(options).json()=={'sigla':['АБ1','Читальный зал'],'source':['Дар','Закупка']}
+    # Copies from receipts contribute to the same dictionaries as individual copies.
+    receipt=add_body(b,2,'100')
+    receipt['source']='Поставщик';receipt['lines'][0]['sigla']='АБ2'
+    assert client.post('/api/acquisitions',json=receipt).status_code==200
+    assert client.get(options).json()=={'sigla':['АБ1','АБ2','Читальный зал'],'source':['Дар','Закупка','Поставщик']}
+
+
 def test_catalog_search_by_copy_identifiers(client):
     t=make_type(client)
     a=save(client,payload(t))
