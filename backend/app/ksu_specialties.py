@@ -8,20 +8,16 @@ from .ksu_auto import vals
 
 
 def report(s, date_from, date_to):
-    pairs=list(s.execute(select(Acquisition,KsuEntry).outerjoin(KsuEntry,KsuEntry.acquisition_id==Acquisition.id)
-        .where(Acquisition.status=='posted',Acquisition.received_on>=date_from,Acquisition.received_on<=date_to)
-        .order_by(Acquisition.received_on,Acquisition.id)))
-    ids=[a.id for a,e in pairs];lines={}
-    if ids:
-        for line,record in s.execute(select(AcquisitionLine,Record).join(Record,Record.id==AcquisitionLine.record_id)
-            .where(AcquisitionLine.acquisition_id.in_(ids),AcquisitionLine.quantity>0).order_by(AcquisitionLine.id)):
-            lines.setdefault(line.acquisition_id,[]).append((line,record))
+    from .ksu_data import entries_query, grouped_members
+    entries=list(s.scalars(entries_query().where(KsuEntry.registered_on>=date_from,KsuEntry.registered_on<=date_to)
+        .order_by(KsuEntry.registered_on,KsuEntry.id)))
+    lines=grouped_members(s,[e.id for e in entries])
     columns={};rows=[];totals={};overall={'titles':0,'copies':0,'amount':Decimal(0),'unpriced_count':0}
     def bucket():return {'titles':set(),'copies':0,'amount':Decimal(0),'unpriced_count':0}
     def output(b):return {**b,'titles':len(b['titles']) if isinstance(b['titles'],set) else b['titles'],'amount':format(b['amount'],'.2f')}
-    for a,e in pairs:
+    for e in entries:
         groups={};total=bucket();issues=[]
-        for line,record in lines.get(a.id,[]):
+        for line,record in lines.get(e.id,[]):
             specialties=sorted(vals(record.marc,'952','j'));messages=[]
             if len(specialties)==1:
                 key='specialty:'+specialties[0];label=specialties[0]
@@ -32,7 +28,7 @@ def report(s, date_from, date_to):
                 messages.append('Указано несколько специальностей: '+ '; '.join(specialties)+'. Экземпляры и сумма учтены один раз в отдельной колонке, без распределения.')
             columns[key]=label
             known=line.unit_price is not None and line.currency=='KZT'
-            if not known:messages.append('Не указана цена в тенге: исправьте поступление.')
+            if not known:messages.append('Не указана цена в тенге: исправьте экземпляры.')
             amount=line.unit_price*line.quantity if known else Decimal(0)
             for b in (groups.setdefault(key,bucket()),total):
                 b['titles'].add(record.id);b['copies']+=line.quantity;b['amount']+=amount
@@ -43,8 +39,8 @@ def report(s, date_from, date_to):
             t=totals.setdefault(key,{'titles':0,'copies':0,'amount':Decimal(0),'unpriced_count':0})
             for metric in t:t[metric]+=Decimal(b[metric]) if metric=='amount' else b[metric]
         for metric in overall:overall[metric]+=Decimal(row_total[metric]) if metric=='amount' else row_total[metric]
-        rows.append({'acquisition_id':a.id,'number':e.number if e else None,'year':e.year if e else None,
-            'received_on':a.received_on.isoformat(),'source':a.source,'invoice':a.invoice,
+        rows.append({'id':e.id,'acquisition_id':e.acquisition_id,'number':e.number,'year':e.year,
+            'received_on':e.registered_on.isoformat(),'source':e.source,'invoice':e.invoice,
             'groups':serialized,'total':row_total,'issues':issues})
     keys=sorted(columns,key=lambda key:(key in ('missing','multiple'),columns[key].casefold()))
     return {'date_from':date_from.isoformat(),'date_to':date_to.isoformat(),
@@ -66,7 +62,7 @@ def export_xlsx(data):
     groups=data['columns']+[{'key':'total','label':'Всего'}];width=4+3*len(groups)
     put(1,1,f"Поступления по специальностям: {data['date_from']} — {data['date_to']}. Суммы в тенге, без доставки.")
     ws.merge_cells(start_row=1,start_column=1,end_row=1,end_column=width)
-    for i,label in enumerate(['№ КСУ','Дата поступления','Источник поступления','Документ'],1):
+    for i,label in enumerate(['№ КСУ','Дата регистрации КСУ','Источник поступления','Документ'],1):
         put(2,i,label);ws.merge_cells(start_row=2,start_column=i,end_row=3,end_column=i)
     for i,g in enumerate(groups):
         col=5+i*3;put(2,col,g['label']);ws.merge_cells(start_row=2,start_column=col,end_row=2,end_column=col+2)
@@ -95,12 +91,12 @@ def export_xlsx(data):
     for text in ['Специальности — полные значения 952$j из текущих карточек каталога.',
         'Каждый экземпляр и его стоимость учитываются один раз. Несколько специальностей не распределяются автоматически.',
         'Наименования считаются отдельно в каждой партии. Общий итог — сумма по партиям, не уникальные названия фонда.',
-        'Отменённые поступления и экземпляры без поступления исключены. Списания не уменьшают исторические поступления.',
-        'Период определяется по дате поступления включительно. Суммы в тенге, без доставки.']:
+        'Отменённые поступления и экземпляры без КСУ исключены. Списания не уменьшают исторические поступления.',
+        'Период определяется по дате регистрации КСУ включительно. Суммы в тенге, без доставки.']:
         notes.append([text])
     for r in data['rows']:
         for issue in r['issues']:
-            notes.append([f"Поступление №{r['acquisition_id']}",f"Запись №{issue['record_id']}",issue['title'],' '.join(issue['messages'])])
+            notes.append([f"КСУ {r['number']}/{r['year']}",f"Запись №{issue['record_id']}",issue['title'],' '.join(issue['messages'])])
     for row in notes:
         for c in row:
             if isinstance(c.value,str):c.data_type='s'

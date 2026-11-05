@@ -3,13 +3,15 @@ from datetime import date
 from decimal import Decimal
 from io import BytesIO
 from typing import Literal
+from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import Field
 from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
-from .db import Acquisition, AcquisitionLine, Record, KsuEntry, KsuHistory
-from .acquisitions import Strict, lock_request
+from .db import Acquisition, AcquisitionLine, Record, KsuEntry, KsuHistory, Copy
+from .acquisitions import Strict, lock_request, digest, copy_output
+from .ksu_data import entries_query, entry_output, member_query
 
 KINDS={'science':'Научные','study':'Учебные','fiction':'Художественные'}
 LANGUAGES={'kaz':'Государственный (казахский)','rus':'Русский','foreign':'Иностранный'}
@@ -23,6 +25,22 @@ class RuleInput(Strict):
     kind: Literal['','science','study','fiction']=''
     language: Literal['','kaz','rus','foreign']=''
     media: Literal['','audio','video','cd']=''
+
+class EntryInput(Strict):
+    number: int=Field(ge=1,le=2147483647,strict=True)
+    year: int=Field(ge=1900,le=9999,strict=True)
+    registered_on: date
+    document_on: date|None=None
+    source: str=Field(default='',max_length=255)
+    invoice: str=Field(default='',max_length=255)
+    note: str=Field(default='',max_length=4000)
+
+class EntryCreate(EntryInput):
+    request_key: UUID
+
+class EntryEdit(EntryInput):
+    version: int=Field(ge=1)
+    reason: str=Field(min_length=1,max_length=4000)
 
 def serialize(e,a):
     return {'id':e.id,'acquisition_id':e.acquisition_id,'acquisition_version':e.acquisition_version,'version':e.version,
@@ -87,9 +105,54 @@ def make_router(auth,db):
         s.commit()
         return {'code':code,'version':existing.version,**existing.settings}
 
+    @router.post('/entries',status_code=201)
+    def create_entry(body:EntryCreate,s=Depends(db),user=Depends(auth)):
+        key=str(body.request_key);hashed=digest(body.model_dump(mode='json'))
+        lock_request(s,'ksu-create:',key)
+        old=s.scalar(select(KsuEntry).where(KsuEntry.request_key==key))
+        if old:
+            if old.payload_hash!=hashed:raise HTTPException(409,'Операция создания КСУ уже выполнена с другими данными')
+            return entry_output(old)
+        lock_request(s,'ksu-number:',body.year)
+        e=KsuEntry(**body.model_dump(exclude={'request_key'}),request_key=key,payload_hash=hashed,
+            version=1,snapshot={'mode':'copies'})
+        try:
+            s.add(e);s.flush()
+            s.add(KsuHistory(entry_id=e.id,actor_id=user.id,reason='Создание КСУ',before={},after=entry_output(e)))
+            s.commit()
+        except IntegrityError:
+            s.rollback();raise HTTPException(409,'КСУ с таким номером и годом уже существует')
+        return entry_output(e)
+
     @router.put('/entries/{id}')
-    def obsolete_registration(id:int):
-        raise HTTPException(409,'КСУ теперь формируется автоматически. Исправляйте данные в каталоге или поступлении.')
+    def edit_entry(id:int,body:EntryEdit,s=Depends(db),user=Depends(auth)):
+        lock_request(s,'ksu-number:',body.year)
+        e=s.scalar(entries_query().where(KsuEntry.id==id))
+        if not e:raise HTTPException(404,'КСУ не найдена или отменена')
+        if e.version!=body.version:raise HTTPException(409,'КСУ изменена. Откройте актуальную версию.')
+        before=entry_output(e)
+        for k,v in body.model_dump(exclude={'version','reason'}).items():setattr(e,k,v)
+        e.version+=1
+        try:
+            s.flush()
+            s.add(KsuHistory(entry_id=e.id,actor_id=user.id,reason=body.reason,before=before,after=entry_output(e)))
+            s.commit()
+        except IntegrityError:
+            s.rollback();raise HTTPException(409,'КСУ с таким номером и годом уже существует')
+        return entry_output(e)
+
+    @router.get('/entries/{id}/copies')
+    def entry_copies(id:int,offset:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100),s=Depends(db)):
+        e=s.get(KsuEntry,id)
+        if not e:raise HTTPException(404,'КСУ не найдена')
+        stmt=member_query([id])
+        total=s.scalar(select(func.count()).select_from(stmt.subquery()))
+        from .ksu_auto import vals
+        items=[]
+        for c,line,r in s.execute(stmt.order_by(Copy.id).offset(offset).limit(limit)):
+            receipt=s.get(Acquisition,line.acquisition_id) if line else None
+            items.append({**copy_output(c,line,receipt),'title':' '.join(sorted(vals(r.marc,'245','a')))})
+        return {'entry':entry_output(e),'total':total,'items':items}
 
     @router.get('/report')
     def get_report(year:int=Query(...,ge=1900,le=9999),s=Depends(db)):return report(s,year)

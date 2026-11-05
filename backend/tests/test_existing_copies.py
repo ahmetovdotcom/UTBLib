@@ -42,7 +42,7 @@ def test_existing_copy_validation_auth_and_record_key_scope(client):
     url=f"/api/records/{a['id']}/copies"
     assert client.post(url,json=body(),headers={'X-Admin-Key':'bad'}).status_code==401
     assert client.post(url,json=body(unit_price='-1')).status_code==422
-    assert client.post(url,json=body(invoice='Нельзя')).status_code==422
+    assert client.post(url,json=body(invoice='X'*256)).status_code==422
     assert client.post('/api/records/999999/copies',json=body()).status_code==404
     p=body(inventory_number='',barcode='',unit_price=None,received_on=None,source='')
     c=client.post(url,json=p).json();assert c['inventory_number'].startswith('INV-') and c['unit_price'] is None

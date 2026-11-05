@@ -72,24 +72,22 @@ def ensure_entry(s,a):
     year=a.received_on.year;lock_request(s,'ksu-number:',year)
     number=(s.scalar(select(func.max(KsuEntry.number)).where(KsuEntry.year==year)) or 0)+1
     entry=KsuEntry(acquisition_id=a.id,acquisition_version=a.version or 1,year=year,number=number,
-        registered_on=a.received_on,document_on=a.document_on or a.received_on,version=1,
+        registered_on=a.received_on,document_on=a.document_on,source=a.source,invoice=a.invoice,note=a.note,version=1,
         snapshot={'mode':'automatic','source':a.source,'invoice':a.invoice,'lines':[]})
     s.add(entry);s.flush();return entry
 
 def automatic_report(s,year,columns):
     mapping=rules(s)
-    pairs=list(s.execute(select(KsuEntry,Acquisition).join(Acquisition,Acquisition.id==KsuEntry.acquisition_id).where(KsuEntry.year==year,Acquisition.status=='posted').order_by(KsuEntry.number)))
-    ids=[a.id for _,a in pairs];by_id={}
-    if ids:
-        for l,r in s.execute(select(AcquisitionLine,Record).join(Record,Record.id==AcquisitionLine.record_id).where(AcquisitionLine.acquisition_id.in_(ids),AcquisitionLine.quantity>0).order_by(AcquisitionLine.id)):
-            by_id.setdefault(l.acquisition_id,[]).append((l,r))
+    from .ksu_data import entries_query, grouped_members, entry_output
+    entries=list(s.scalars(entries_query().where(KsuEntry.year==year).order_by(KsuEntry.number)))
+    by_id=grouped_members(s,[e.id for e in entries])
     rows=[];totals={c['key']:Decimal(0) if c['key'].endswith('_amount') else 0 for c in columns};issue_count=0
-    for e,a in pairs:
+    for e in entries:
         m={c['key']:0 for c in columns};amount=Decimal(0);sets={};issues=[];unknown_price=0;lines=[]
-        for l,r in by_id.get(a.id,[]):
+        for l,r in by_id.get(e.id,[]):
             cl,errors=classify(r.marc,mapping)
-            if l.unit_price is None:errors.append('Не указана цена в поступлении');unknown_price+=l.quantity
-            elif l.currency!='KZT':errors.append('Цена поступления не в тенге: '+l.currency);unknown_price+=l.quantity
+            if l.unit_price is None:errors.append('Не указана цена экземпляра');unknown_price+=l.quantity
+            elif l.currency!='KZT':errors.append('Цена экземпляра не в тенге: '+l.currency);unknown_price+=l.quantity
             else:amount+=l.unit_price*l.quantity
             for key in ('on_titles','titles','titles_check'):sets.setdefault(key,set()).add(r.id)
             for key in ('copies','on_copies'):m[key]+=l.quantity
@@ -101,15 +99,12 @@ def automatic_report(s,year,columns):
             if cl['media']:sets.setdefault('media_'+cl['media'],set()).add(r.id)
             title=' '.join(sorted(vals(r.marc,'245','a'))) or l.title_snapshot
             if errors:issues.append({'record_id':r.id,'title':title,'messages':errors})
-            lines.append({'line_id':l.id,'record_id':r.id,'title':title,'quantity':l.quantity,**cl})
+            lines.append({'line_id':l.id,'record_id':r.id,'title':title,'quantity':l.quantity,'copy_ids':l.copy_ids,**cl})
         m.update({k:len(v) for k,v in sets.items()});m['on_amount']=format(amount,'.2f');m['off_amount']='0.00'
-        cancelled=a.status!='posted'
-        if not cancelled:
-            for k,v in m.items():totals[k]+=Decimal(v) if k.endswith('_amount') else v
-            issue_count+=len(issues)
-        rows.append({'id':e.id,'acquisition_id':a.id,'number':e.number,'year':e.year,'registered_on':e.registered_on.isoformat(),
-            'document_on':a.document_on.isoformat() if a.document_on else None,'received_on':a.received_on.isoformat(),
-            'source':a.source,'invoice':a.invoice,'status':'cancelled' if cancelled else ('incomplete' if issues else 'current'),
+        for k,v in m.items():totals[k]+=Decimal(v) if k.endswith('_amount') else v
+        issue_count+=len(issues)
+        rows.append({**entry_output(e),'received_on':e.registered_on.isoformat(),
+            'status':'incomplete' if issues else 'current',
             'metrics':m,'lines':lines,'issues':issues,'unpriced_count':unknown_price})
-    return {'year':year,'columns':columns,'rows':rows,'totals':{k:format(v,'.2f') if isinstance(v,Decimal) else v for k,v in totals.items()},
+    return {'year':year,'next_number':(s.scalar(select(func.max(KsuEntry.number)).where(KsuEntry.year==year)) or 0)+1,'columns':columns,'rows':rows,'totals':{k:format(v,'.2f') if isinstance(v,Decimal) else v for k,v in totals.items()},
         'issue_count':issue_count,'stale_count':0,'unpriced_count':sum(r['unpriced_count'] for r in rows if r['status']!='cancelled')}

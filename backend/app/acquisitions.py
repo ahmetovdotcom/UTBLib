@@ -6,10 +6,11 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from sqlalchemy import select, func, update, text
+from sqlalchemy import select, func, text
 from sqlalchemy.exc import IntegrityError
-from .db import Acquisition, AcquisitionLine, Copy, CopyHistory, Record
+from .db import Acquisition, AcquisitionLine, Copy, CopyHistory, Record, KsuEntry
 
 class Strict(BaseModel):
     model_config=ConfigDict(extra='forbid',str_strip_whitespace=True)
@@ -41,6 +42,12 @@ class AcquisitionInput(Strict):
         return self
 
 class CopyInput(Strict):
+    unit_price: Decimal|None=Field(default=None,ge=0,max_digits=14,decimal_places=2)
+    currency: str=Field(default='KZT',pattern=r'^[A-Z]{3}$')
+    received_on: date|None=None
+    source: str=Field(default='',max_length=255)
+    invoice: str=Field(default='',max_length=255)
+    ksu_entry_id: int|None=Field(default=None,gt=0)
     version: int=Field(ge=1)
     inventory_number: str=Field(min_length=1,max_length=100)
     barcode: str=Field(min_length=1,max_length=100)
@@ -57,6 +64,8 @@ class CopyInput(Strict):
 
 
 class ExistingCopyInput(Strict):
+    invoice: str=Field(default='',max_length=255)
+    ksu_entry_id: int|None=Field(default=None,gt=0)
     request_key: UUID
     inventory_number: str=Field(default='',max_length=100)
     barcode: str=Field(default='',max_length=100)
@@ -128,6 +137,8 @@ def register(s,body):
     receipt=Acquisition(request_key=key,payload_hash=hashed,invoice=body.invoice,source=body.source,
                         received_on=body.received_on,document_on=body.document_on,note=body.note)
     s.add(receipt);s.flush()
+    from .ksu_auto import ensure_entry
+    ksu=ensure_entry(s,receipt)
     for entry in body.lines:
         r=records[entry.record_id]
         title=' '.join(sf['value'] for f in r.marc['fields'] if f['tag']=='245' for sf in f.get('subfields',[]) if sf['code'] in ('a','b')) or 'Без заглавия'
@@ -135,10 +146,9 @@ def register(s,body):
         s.add(line);s.flush()
         for _ in range(entry.quantity):
             token=uuid4().hex
-            s.add(Copy(line_id=line.id,inventory_number='INV-'+token,barcode='BC-'+token,sigla=line.sigla,note=line.note))
+            s.add(Copy(line_id=line.id,inventory_number='INV-'+token,barcode='BC-'+token,sigla=line.sigla,note=line.note,
+                ksu_entry_id=ksu.id,received_on=receipt.received_on,source=receipt.source,invoice=receipt.invoice))
     s.flush()
-    from .ksu_auto import ensure_entry
-    ensure_entry(s,receipt)
     return receipt
 
 def money(value): return None if value is None else format(value,'.2f')
@@ -161,8 +171,8 @@ def copy_output(c,line=None,receipt=None):
         'acquisition_id':receipt.id if receipt else None,'origin':'acquisition' if receipt else 'existing_fund',
         'inventory_number':c.inventory_number,'barcode':c.barcode,'sigla':c.sigla,'checked_on':c.checked_on,'note':c.note,
         'unit_price':money(line.unit_price if line else c.unit_price),'currency':line.currency if line else c.currency,
-        'received_on':receipt.received_on if receipt else c.received_on,'source':receipt.source if receipt else c.source,
-        'invoice':receipt.invoice if receipt else None}
+        'received_on':c.received_on,'source':c.source,'invoice':c.invoice or None,
+        'ksu_entry_id':c.ksu_entry_id}
 
 def make_router(auth,db):
     router=APIRouter(prefix='/api',dependencies=[Depends(auth)])
@@ -194,9 +204,14 @@ def make_router(auth,db):
         return {'acquisitions':len({r.acquisition_id for r in rows}),'titles':len({r.record_id for r in rows}),
                 'quantity':sum(r.quantity for r in rows),'unpriced_count':unknown,'totals':{k:money(v) for k,v in totals.items()}}
 
+    @router.get('/copies/ksu-options')
+    def ksu_options(s=Depends(db)):
+        from .ksu_data import entries_query, entry_output
+        return {'items':[entry_output(e) for e in s.scalars(entries_query().order_by(KsuEntry.year.desc(),KsuEntry.number.desc()))]}
+
     @router.post('/records/{id}/copies',status_code=201)
     def create_existing_copy(id:int,body:ExistingCopyInput,s=Depends(db)):
-        key=str(body.request_key);hashed=digest({'record_id':id,**body.model_dump(mode='json')})
+        key=str(body.request_key);hashed=digest({'record_id':id,**body.model_dump(mode='json',exclude={k for k in ('invoice','ksu_entry_id') if k not in body.model_fields_set})})
         lock_request(s,'existing-copy:',key)
         old=s.scalar(select(Copy).where(Copy.request_key==key))
         if old:
@@ -204,6 +219,8 @@ def make_router(auth,db):
             return copy_output(old)
         if s.scalar(select(Record).where(Record.id==id).with_for_update()) is None:
             raise HTTPException(404,'Запись не найдена')
+        from .ksu_data import validate_entry
+        validate_entry(s,body.ksu_entry_id)
         values=body.model_dump(exclude={'request_key'})
         token=uuid4().hex
         values['inventory_number']=values['inventory_number'] or 'INV-'+token
@@ -234,11 +251,12 @@ def make_router(auth,db):
         details={d.copy_id:d for d in s.scalars(select(CopyCirculation).where(CopyCirculation.copy_id.in_(ids)))}
         can_view=any(has(user,p) for p in ('circulation.issue','circulation.return','circulation.view_any_history'))
         readers={r.id:r for r in s.scalars(select(Reader).where(Reader.id.in_([l.reader_id for l in loans.values()])))} if can_view else {}
+        ksu_labels={e.id:f'{e.number}/{e.year}' for e in s.scalars(select(KsuEntry).where(KsuEntry.id.in_([c.ksu_entry_id for c,_,_ in rows if c.ksu_entry_id])))}
         items=[]
         for c,line,receipt in rows:
             loan=loans.get(c.id);reservation=reservations.get(c.id)
             state=copy_availability(c,details.get(c.id) or detail(s,c),loan,reservation)
-            item={**copy_output(c,line,receipt),'availability':state,'can_edit':c.status=='active' and not loan and not reservation,'loan':None}
+            item={**copy_output(c,line,receipt),'ksu_number':ksu_labels.get(c.ksu_entry_id),'availability':state,'can_edit':c.status=='active' and not loan and not reservation,'loan':None}
             if loan and can_view:
                 borrower=readers[loan.reader_id]
                 item['loan']={'id':loan.id,'reader_id':borrower.id,'reader_name':borrower.full_name,'ticket_number':borrower.ticket_number,'issued_at':loan.issued_at,'due_at':loan.due_at}
@@ -249,22 +267,53 @@ def make_router(auth,db):
 
     @router.put('/copies/{id}')
     def edit_copy(id:int,body:CopyInput,s=Depends(db)):
+        existing=s.get(Copy,id)
+        if existing and existing.line_id:
+            origin=s.get(AcquisitionLine,existing.line_id)
+            s.scalar(select(Acquisition).where(Acquisition.id==origin.acquisition_id).with_for_update())
         c=s.scalar(select(Copy).where(Copy.id==id).with_for_update().execution_options(populate_existing=True))
         if c is None: raise HTTPException(404,'Экземпляр не найден')
         from .circulation_service import active_loan,active_reservation
         if active_loan(s,c.id) or active_reservation(s,c.id):raise HTTPException(409,'Экземпляр выдан или забронирован; реквизиты нельзя менять')
         if c.version!=body.version or c.status!='active': raise HTTPException(409,'Экземпляр изменён, списан или отменён. Обновите список.')
-        before={k:getattr(c,k) for k in type(body).model_fields};before['checked_on']=str(c.checked_on) if c.checked_on else None
-        values=body.model_dump(exclude={'version'});values['version']=body.version+1
+        from .ksu_data import validate_entry
+        from .stock_operations import receipt_snapshot
+        from .db import AcquisitionHistory
+        line=s.get(AcquisitionLine,c.line_id) if c.line_id else None
+        receipt=s.get(Acquisition,line.acquisition_id) if line else None
+        before=jsonable_encoder(copy_output(c,line,receipt))
+        values=body.model_dump(exclude={'version'},exclude_unset=True)
+        if 'ksu_entry_id' in values:validate_entry(s,values['ksu_entry_id'])
+        # A price correction affects this copy only. Split the receipt line to keep
+        # receipt totals, subsequent corrections and the KSU amount in agreement.
+        price=values.get('unit_price',line.unit_price if line else c.unit_price)
+        currency=values.get('currency',line.currency if line else c.currency)
+        receipt_before=None
+        if line and (price!=line.unit_price or currency!=line.currency):
+            receipt_before=receipt_snapshot(s,receipt)
+            if line.quantity>1:
+                line.quantity-=1
+                replacement=AcquisitionLine(acquisition_id=line.acquisition_id,record_id=line.record_id,
+                    title_snapshot=line.title_snapshot,quantity=1,unit_price=price,currency=currency,
+                    sigla=c.sigla,note=line.note)
+                s.add(replacement);s.flush();c.line_id=replacement.id;line=replacement
+            else:
+                line.unit_price=price;line.currency=currency
+            receipt.version+=1
+        for k,v in values.items():setattr(c,k,v)
+        c.version+=1
         try:
-            result=s.execute(update(Copy).where(Copy.id==id,Copy.version==body.version,Copy.status=='active').values(**values))
-            if result.rowcount!=1: raise HTTPException(409,'Экземпляр изменён. Обновите список.')
-            s.add(CopyHistory(copy_id=id,before=before,after={**body.model_dump(mode='json'),'version':body.version+1}))
+            s.flush()
+            after=jsonable_encoder(copy_output(c,line,receipt))
+            s.add(CopyHistory(copy_id=id,before=before,after=after))
+            if receipt_before is not None:
+                s.add(AcquisitionHistory(acquisition_id=receipt.id,request_key=str(uuid4()),
+                    payload_hash=digest(after),action='copy_price',reason=f'Исправление цены экземпляра №{c.id}',
+                    before=receipt_before,after=receipt_snapshot(s,receipt)))
             s.commit()
         except IntegrityError:
             s.rollback();raise HTTPException(409,'Инвентарный номер или штрихкод уже используется')
-        c=s.get(Copy,id);line=s.get(AcquisitionLine,c.line_id) if c.line_id else None
-        return copy_output(c,line,s.get(Acquisition,line.acquisition_id) if line else None)
+        return copy_output(c,line,receipt)
 
     @router.get('/copies/{id}/history')
     def history(id:int,s=Depends(db)):

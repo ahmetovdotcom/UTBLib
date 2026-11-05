@@ -16,7 +16,7 @@ def receipt(c,code='КУК',language='kaz',price='10.10'):
 
 def report(c):return c.get('/api/ksu/report?year=2026').json()
 
-def test_automatic_registration_no_manual_form_and_no_duplicates(client):
+def test_automatic_registration_and_no_duplicates(client):
     a,r,b=receipt(client)
     data=report(client)
     assert data['issue_count']==0 and len(data['rows'])==1
@@ -27,7 +27,7 @@ def test_automatic_registration_no_manual_form_and_no_duplicates(client):
     assert client.post('/api/acquisitions',json=b).json()['id']==a['id']
     assert report(client)==data
     assert client.get('/api/records/'+str(r['id'])+'/copies').json()['total']==5
-    assert client.put('/api/ksu/entries/'+str(a['id']),json={}).status_code==409
+    assert client.put('/api/ksu/entries/'+str(a['id']),json={}).status_code==422
     response=client.get('/api/ksu/export?year=2026');assert response.status_code==200,response.text
     ws=load_workbook(BytesIO(response.content)).worksheets[0]
     assert ws['E4'].value==1 and ws['F4'].value==5 and ws['G4'].value==50.5

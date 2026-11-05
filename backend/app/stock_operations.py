@@ -101,10 +101,30 @@ def make_router(auth,db):
         return [{'id':h.id,'action':h.action,'reason':h.reason,'created_at':h.created_at,'before':h.before,'after':h.after} for h in s.scalars(select(AcquisitionHistory).where(AcquisitionHistory.acquisition_id==id).order_by(AcquisitionHistory.id))]
 
     @router.put('/acquisitions/{id}')
-    def correct(id:int,body:Correction,s=Depends(db)):
+    def correct(id:int,body:Correction,s=Depends(db),user=Depends(auth)):
         r,repeated,hashed=prepare(s,id,body,'correct')
         if repeated is not None: return repeated
         before=receipt_snapshot(s,r)
+        from .ksu_auto import ensure_entry
+        from .ksu_data import entry_output
+        from .db import KsuHistory
+        ksu=ensure_entry(s,r)
+        ksu_before=entry_output(ksu)
+        header_changes={k:getattr(body,k) for k in ('invoice','received_on','source') if getattr(body,k)!=getattr(r,k)}
+        # Only changed receipt fields propagate; saving an unrelated field must
+        # preserve metadata edited separately on a copy.
+        for c in receipt_copies(s,id):
+            changes={k:v for k,v in header_changes.items() if getattr(c,k)==getattr(r,k)}
+            if changes and c.status=='active':
+                old_values={k:str(getattr(c,k)) if isinstance(getattr(c,k),date) else getattr(c,k) for k in changes}
+                for k,v in changes.items():setattr(c,k,v)
+                c.version+=1
+                s.add(CopyHistory(copy_id=c.id,before=old_values,after=jsonable_encoder({**changes,'version':c.version,'reason':body.reason})))
+        for k in ('invoice','source','document_on'):
+            if k in body.model_fields_set and getattr(body,k)!=getattr(r,k) and getattr(ksu,k)==getattr(r,k):
+                setattr(ksu,k,getattr(body,k));ksu.version+=1
+        if entry_output(ksu)!=ksu_before:
+            s.add(KsuHistory(entry_id=ksu.id,actor_id=user.id,reason=body.reason,before=ksu_before,after=entry_output(ksu)))
         old={l.id:l for l in s.scalars(select(AcquisitionLine).where(AcquisitionLine.acquisition_id==id))}
         given=[l.id for l in body.lines if l.id is not None]
         if len(set(given))!=len(given) or set(given)!=set(old): raise HTTPException(422,'Передайте все существующие строки поступления; для удаления строки задайте количество 0')
@@ -121,13 +141,20 @@ def make_router(auth,db):
                     raise HTTPException(422,'При уменьшении количества выберите ровно столько действующих экземпляров для отмены')
                 for cid in removed: change_status(s,active[cid],'cancelled',body.reason)
                 increase=max(0,entry.quantity-line.quantity)
+                if line.unit_price!=entry.unit_price or line.currency!=entry.currency:
+                    for c in active.values():
+                        if c.status=='active':
+                            c.version+=1
+                            s.add(CopyHistory(copy_id=c.id,before={'unit_price':str(line.unit_price) if line.unit_price is not None else None,'currency':line.currency},
+                                after={'unit_price':str(entry.unit_price) if entry.unit_price is not None else None,'currency':entry.currency,'version':c.version,'reason':body.reason}))
                 for k,v in entry.model_dump(exclude={'id','cancel_copy_ids','record_id'}).items(): setattr(line,k,v)
             else:
                 if entry.quantity<1 or entry.cancel_copy_ids: raise HTTPException(422,'Новая строка должна содержать экземпляры без отмен')
                 line=AcquisitionLine(acquisition_id=id,title_snapshot=title(records[entry.record_id]),**entry.model_dump(exclude={'id','cancel_copy_ids'}))
                 s.add(line);s.flush();increase=entry.quantity
             for _ in range(increase):
-                token=uuid4().hex;s.add(Copy(line_id=line.id,inventory_number='INV-'+token,barcode='BC-'+token,sigla=line.sigla,note=line.note))
+                token=uuid4().hex;s.add(Copy(line_id=line.id,inventory_number='INV-'+token,barcode='BC-'+token,sigla=line.sigla,note=line.note,
+                    ksu_entry_id=ksu.id,received_on=body.received_on,source=body.source,invoice=body.invoice))
         for k in ['invoice','received_on','source','note']: setattr(r,k,getattr(body,k))
         if 'document_on' in body.model_fields_set:r.document_on=body.document_on
         return audit(s,r,body,'correct',hashed,before)

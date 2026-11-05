@@ -90,7 +90,7 @@ def test_copy_edit_uniqueness_optimistic_lock_audit_and_ledger(client):
     assert client.put('/api/copies/'+str(second['id']),json=body).status_code==409
     assert len(client.get('/api/copies/'+str(first['id'])+'/history').json())==1
     assert client.get('/api/acquisitions/summary').json()['totals']=={'KZT':'10000.00'}
-    body['unit_price']='1'
+    body['unit_price']='-1'
     assert client.put('/api/copies/'+str(first['id']),json=body).status_code==422
 
 def test_acquisition_auth_limits_and_malformed_quantity(client):
