@@ -141,6 +141,9 @@ def make_router(auth,db):
     @router.post('/api/reader-branches')
     @router.put('/api/reader-branches/{id}')
     def save_branch(body:BranchInput,id:int|None=None,s=Depends(db),user=Depends(auth)):
+        if id:
+            from .acquisitions import lock_request
+            lock_request(s, 'visit-point:', id)
         branch=s.get(Branch,id) if id else Branch()
         if not branch: raise HTTPException(404,'Пункт не найден')
         for key,value in body.model_dump().items(): setattr(branch,key,value)
@@ -331,21 +334,18 @@ def make_router(auth,db):
         rate_limit(s,user.id,'scan',180)
         branch=s.get(Branch,body.branch_id)
         if not branch or not branch.active: raise HTTPException(422,'Выберите действующий пункт обслуживания')
-        reader=lookup(s,body.code,lock=True); now=utcnow()
-        previous=s.scalar(select(LibraryVisit).where(LibraryVisit.reader_id==reader.id,LibraryVisit.scanned_at>=now-timedelta(minutes=10)).order_by(LibraryVisit.scanned_at.desc()).limit(1))
-        duplicate=previous is not None
-        visit=previous or LibraryVisit(reader_id=reader.id,branch_id=body.branch_id,scanned_at=now,scanned_by=user.id,source=body.source,notes=body.notes)
-        if not duplicate:
-            s.add(visit); s.flush(); audit(s,'visit.record',user.id,reader.id,visit_id=visit.id)
+        from .visit_checkin import record_visit
+        reader=lookup(s,body.code,lock=True)
+        visit,duplicate=record_visit(s,branch.id,reader=reader,actor=user.id,source=body.source,notes=body.notes)
         s.commit()
         return {'id':visit.id,'reader_id':reader.id,'full_name':reader.full_name,'scanned_at':visit.scanned_at,'branch_id':visit.branch_id,'duplicate':duplicate}
     @router.get('/api/visits')
     def visits(offset:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100),reader_id:int|None=None,branch_id:int|None=None,s=Depends(db),user=Depends(auth)):
-        stmt=select(LibraryVisit,Reader.full_name,Reader.ticket_number,Branch.name,User.display_name).join(Reader,Reader.id==LibraryVisit.reader_id).join(Branch,Branch.id==LibraryVisit.branch_id).join(User,User.id==LibraryVisit.scanned_by)
+        stmt=select(LibraryVisit,Reader.full_name,Reader.ticket_number,Branch.name,User.display_name).outerjoin(Reader,Reader.id==LibraryVisit.reader_id).join(Branch,Branch.id==LibraryVisit.branch_id).outerjoin(User,User.id==LibraryVisit.scanned_by)
         if reader_id: stmt=stmt.where(LibraryVisit.reader_id==reader_id)
         if branch_id: stmt=stmt.where(LibraryVisit.branch_id==branch_id)
         total=s.scalar(select(func.count()).select_from(stmt.subquery()))
-        return {'total':total,'items':[{'id':v.id,'reader_id':v.reader_id,'full_name':name,'ticket_number':ticket,'branch':branch,'actor':actor,'scanned_at':v.scanned_at,'source':v.source,'notes':v.notes} for v,name,ticket,branch,actor in s.execute(stmt.order_by(LibraryVisit.scanned_at.desc(),LibraryVisit.id.desc()).offset(offset).limit(limit))]}
+        return {'total':total,'items':[{'id':v.id,'reader_id':v.reader_id,'full_name':name or v.guest_name,'ticket_number':ticket,'study_group':v.guest_group,'course':v.guest_course,'branch':branch,'actor':actor or ('Без входа' if v.source=='qr_guest' else 'Самостоятельно'),'scanned_at':v.scanned_at,'source':v.source,'notes':v.notes} for v,name,ticket,branch,actor in s.execute(stmt.order_by(LibraryVisit.scanned_at.desc(),LibraryVisit.id.desc()).offset(offset).limit(limit))]}
     @router.get('/api/visits/analytics')
     def visit_analytics(days:int=Query(7,ge=1,le=90),s=Depends(db),user=Depends(auth)):
         today=datetime.now(TZ).date(); start,_=local_bounds(today-timedelta(days=days-1)); _,end=local_bounds(today)

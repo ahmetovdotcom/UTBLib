@@ -40,6 +40,10 @@ def authenticated_reader(request: Request, s=Depends(get_db)):
     expected = hmac.new(key.encode(), message.encode(), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(signature, expected):
         raise HTTPException(401, 'Invalid assertion')
+    return reader_for_subject(s, subject)
+
+
+def reader_for_subject(s, subject):
     # No fuzzy name/login/email matching, no implicit registration or ticket issuance.
     ids = list(s.scalars(select(ReaderIdentity.reader_id).where(
         ReaderIdentity.source == 'active_directory', ReaderIdentity.entity_type == 'ad_user',

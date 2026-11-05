@@ -84,12 +84,22 @@ class LibraryVisit(Base):
     __tablename__='library_visits'
     __table_args__=(Index('ix_visits_reader_time','reader_id','scanned_at'),Index('ix_visits_branch_time','branch_id','scanned_at'))
     id: Mapped[int]=mapped_column(primary_key=True)
-    reader_id: Mapped[int]=mapped_column(ForeignKey('reader_profiles.id',ondelete='RESTRICT'))
+    reader_id: Mapped[int|None]=mapped_column(ForeignKey('reader_profiles.id',ondelete='RESTRICT'))
     branch_id: Mapped[int]=mapped_column(ForeignKey('reader_branches.id',ondelete='RESTRICT'))
     scanned_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),default=utcnow,index=True)
-    scanned_by: Mapped[int]=mapped_column(ForeignKey('users.id',ondelete='RESTRICT'))
+    scanned_by: Mapped[int|None]=mapped_column(ForeignKey('users.id',ondelete='RESTRICT'))
     source: Mapped[str]=mapped_column(String(20),default='desk')
     notes: Mapped[str]=mapped_column(String(1000),default='')
+    guest_name: Mapped[str|None]=mapped_column(String(300))
+    guest_group: Mapped[str|None]=mapped_column(String(150))
+    guest_course: Mapped[int|None]=mapped_column(Integer)
+    guest_key: Mapped[str|None]=mapped_column(String(64),index=True)
+
+class VisitQrPoint(Base):
+    __tablename__='visit_qr_points'
+    branch_id: Mapped[int]=mapped_column(ForeignKey('reader_branches.id',ondelete='RESTRICT'),primary_key=True)
+    token: Mapped[str]=mapped_column(String(64),unique=True)
+    enabled: Mapped[bool]=mapped_column(Boolean,default=True)
 
 class ReaderCounter(Base):
     __tablename__='reader_counters'

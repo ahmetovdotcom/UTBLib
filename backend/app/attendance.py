@@ -16,8 +16,9 @@ BUCKETS = {
     'faculty': 'Преподаватели / ППС (ПОҚ)', 'staff': 'Сотрудники',
     'external': 'Внешние пользователи', 'doctoral': 'Докторанты',
     'other': 'Прочие / категория не уточнена',
+    'guest': 'Без входа (со слов посетителя)',
 }
-SOURCES = {'desk': 'Рабочее место', 'kiosk': 'Киоск', 'turnstile': 'Турникет'}
+SOURCES = {'desk': 'Рабочее место', 'kiosk': 'Киоск', 'turnstile': 'Турникет', 'qr_account': 'QR · личный кабинет', 'qr_guest': 'QR · без входа'}
 DIMENSIONS = {
     'faculty': 'Факультет', 'department': 'Кафедра', 'education_program': 'Образовательная программа',
     'study_group': 'Учебная группа', 'course': 'Курс', 'cohort_year': 'Год поступления',
@@ -32,7 +33,10 @@ WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 RULES = ('Посещения — зарегистрированные визиты, уникальные читатели — разные читатели за выбранный период. '
          'Уникальные читатели в итогах пересчитываются, а не складываются по дням. '
          'Повторные сканы, уже исключённые при регистрации, не учитываются. '
-         'Категория и учебные данные берутся из текущих карточек читателей; исторических снимков этих полей нет.')
+         'Категория и учебные данные берутся из текущих карточек читателей; исторических снимков этих полей нет. '
+         'Отметки без входа включены в посещения отдельной группой, но не в уникальных читателей. '
+         'Их ФИО, группа и курс указаны посетителями и не подтверждены; карточки читателей не создаются. '
+         'QR-отметка сама по себе не подтверждает физическое присутствие.')
 
 
 class Filters(BaseModel):
@@ -53,7 +57,7 @@ class Filters(BaseModel):
     cohort_year: list[str] = Field(default_factory=list, max_length=100)
     branch_id: list[int] = Field(default_factory=list, max_length=100)
     scanned_by: list[int] = Field(default_factory=list, max_length=100)
-    source: list[Literal['desk', 'kiosk', 'turnstile']] = Field(default_factory=list, max_length=3)
+    source: list[Literal['desk', 'kiosk', 'turnstile', 'qr_account', 'qr_guest']] = Field(default_factory=list, max_length=5)
     weekday: list[int] = Field(default_factory=list, max_length=7)
     time_from: str = ''
     time_to: str = ''
@@ -100,6 +104,7 @@ def parse_filters(request: Request):
 def bucket_expression():
     # Every reader belongs to one bucket. Unspecified students are not assumed to be bachelors.
     return case(
+        (Visit.reader_id.is_(None), 'guest'),
         (or_(Reader.category.in_(['teacher', 'faculty']), Reader.is_teaching_staff.is_(True)), 'faculty'),
         *[(Reader.category == key, key) for key in ('bachelor', 'master', 'staff', 'external', 'doctoral')],
         else_='other',
@@ -133,13 +138,20 @@ def local_expressions(s):
     return {'day': day, 'week': week, 'month': month, 'hour': hour, 'minute': minute, 'weekday': weekday}
 
 
+def reader_column(key):
+    if key == 'full_name': return func.coalesce(Reader.full_name, Visit.guest_name)
+    if key == 'study_group': return func.coalesce(Reader.study_group, Visit.guest_group)
+    if key == 'course': return func.coalesce(Reader.course, Visit.guest_course)
+    return getattr(Reader, key)
+
+
 def query_context(s, f):
     local, bucket = local_expressions(s), bucket_expression()
     start, _ = local_bounds(f.date_from); _, end = local_bounds(f.date_to)
     conditions = [Visit.scanned_at >= start, Visit.scanned_at < end]
     for key in READER_FILTERS:
         if getattr(f, key):
-            conditions.append(func.coalesce(cast(getattr(Reader, key), String), '').in_(getattr(f, key)))
+            conditions.append(func.coalesce(cast(reader_column(key), String), '').in_(getattr(f, key)))
     for key in ('branch_id', 'scanned_by', 'source'):
         if getattr(f, key): conditions.append(getattr(Visit, key).in_(getattr(f, key)))
     if f.bucket: conditions.append(bucket.in_(f.bucket))
@@ -153,9 +165,9 @@ def query_context(s, f):
         if f.time_to: conditions.append(local['minute'] <= minutes(f.time_to))
     if f.q:
         pattern = '%' + f.q.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
-        conditions.append(or_(*(c.ilike(pattern, escape='\\') for c in (Reader.full_name, Reader.ticket_number, Reader.barcode))))
+        conditions.append(or_(*(c.ilike(pattern, escape='\\') for c in (reader_column('full_name'), Reader.ticket_number, Reader.barcode))))
     def query(*columns):
-        return select(*columns).select_from(Visit).join(Reader, Reader.id == Visit.reader_id).where(*conditions)
+        return select(*columns).select_from(Visit).outerjoin(Reader, Reader.id == Visit.reader_id).where(*conditions)
     return query, local, bucket
 
 
@@ -197,7 +209,7 @@ def report(s, f):
         else: ranges[key][1] = day
     rows = [{'period': key, 'date_from': str(bounds[0]), 'date_to': str(bounds[1]),
              **periods.get(key, blank_row())} for key, bounds in ranges.items()]
-    dimension = getattr(Reader, f.breakdown) if f.breakdown in READER_FILTERS else getattr(Visit, f.breakdown)
+    dimension = reader_column(f.breakdown) if f.breakdown in READER_FILTERS else getattr(Visit, f.breakdown)
     dimension = func.coalesce(cast(dimension, String), '')
     labels = {}
     if f.breakdown == 'branch_id':
@@ -216,12 +228,12 @@ def report(s, f):
     return {
         'filters': f.model_dump(mode='json'), 'timezone': str(TZ), 'rules': RULES,
         'columns': [{'key': key, 'label': label} for key, label in BUCKETS.items()
-                    if key not in ('doctoral', 'other') or totals['categories'][key]['visits']],
+                    if key not in ('doctoral', 'other', 'guest') or totals['categories'][key]['visits']],
         'totals': totals, 'rows': rows,
         'months': [{'period': key, **months.get(key, blank_row())} for key in sorted({str(d.replace(day=1)) for d in dates})] if f.group_by == 'day' else [],
         'summary': {'selected_days': len(dates), 'active_days': len(daily),
                     'average_per_day': round(totals['visits'] / len(dates), 2) if dates else 0,
-                    'visits_per_reader': round(totals['visits'] / totals['unique'], 2) if totals['unique'] else 0,
+                    'visits_per_reader': round((totals['visits'] - totals['categories']['guest']['visits']) / totals['unique'], 2) if totals['unique'] else 0,
                     'peak': {'date': peak[0], 'visits': peak[1]} if peak else None},
         'breakdown': breakdown,
         'hours': [{'hour': h, 'visits': hours.get(h, (0, 0))[0], 'unique': hours.get(h, (0, 0))[1]} for h in range(24)],
@@ -234,6 +246,9 @@ def options(s):
     for key in READER_FILTERS:
         values = s.scalars(select(func.coalesce(cast(getattr(Reader, key), String), '')).distinct()).all()
         labels = CATEGORIES if key == 'category' else STATUSES if key == 'status' else {}
+        if key in ('study_group', 'course'):
+            column = Visit.guest_group if key == 'study_group' else Visit.guest_course
+            values += list(s.scalars(select(cast(column, String)).where(column.is_not(None)).distinct()))
         values = set(values) | (set(labels) if labels else {''})
         result[key] = [{'value': v, 'label': labels.get(v, v) or 'Не указано'} for v in sorted(values)]
     result['bucket'] = [{'value': k, 'label': v} for k, v in BUCKETS.items()]
@@ -318,15 +333,17 @@ def make_router(auth, db):
                 limit: int = Query(50, ge=1, le=100), s=Depends(db)):
         query, _, bucket = query_context(s, f)
         total = s.scalar(query(func.count(Visit.id)))
-        stmt = query(Visit.id, Visit.reader_id, Visit.scanned_at, Reader.full_name, Reader.ticket_number,
-                     Reader.category, Reader.faculty, Reader.study_group, Branch.name.label('branch'),
+        stmt = query(Visit.id, Visit.reader_id, Visit.scanned_at, reader_column('full_name').label('full_name'), Reader.ticket_number,
+                     Reader.category, Reader.faculty, reader_column('study_group').label('study_group'), reader_column('course').label('course'), Branch.name.label('branch'),
                      User.display_name.label('actor'), Visit.source, bucket.label('bucket'))
-        stmt = stmt.join(Branch, Branch.id == Visit.branch_id).join(User, User.id == Visit.scanned_by)
+        stmt = stmt.join(Branch, Branch.id == Visit.branch_id).outerjoin(User, User.id == Visit.scanned_by)
         items = []
         for row in s.execute(stmt.order_by(Visit.scanned_at.desc(), Visit.id.desc()).offset(offset).limit(limit)):
             item = dict(row._mapping); stamp = item['scanned_at']
             if stamp.tzinfo is None: stamp = stamp.replace(tzinfo=timezone.utc)
-            item['scanned_at'] = stamp.isoformat(); items.append(item)
+            item['scanned_at'] = stamp.isoformat()
+            item['actor'] = item['actor'] or ('Без входа' if item['source'] == 'qr_guest' else 'Самостоятельно')
+            items.append(item)
         return {'items': items, 'total': total}
 
     return router

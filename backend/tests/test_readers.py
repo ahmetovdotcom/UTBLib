@@ -17,13 +17,13 @@ def test_registry_visits_ticket(client):
     assert c.get('/api/visits/lookup',params={'code':' '+r['barcode'].lower()+' '}).json()['id']==r['id']
     first=c.post('/api/visits',json={'code':r['barcode'],'branch_id':b});assert first.status_code==200,first.text
     b2=c.post('/api/reader-branches',json={'code':'SECOND','name':'Абонемент'}).json()['id']
-    second=c.post('/api/visits',json={'code':r['ticket_number'],'branch_id':b2}).json();assert second['duplicate'] and second['id']==first.json()['id']
-    card=c.get('/api/readers/'+str(r['id'])).json();assert card['status']=='blocked' and card['visits_count']==1
+    second=c.post('/api/visits',json={'code':r['ticket_number'],'branch_id':b2}).json();assert not second['duplicate'] and second['id']!=first.json()['id']
+    card=c.get('/api/readers/'+str(r['id'])).json();assert card['status']=='blocked' and card['visits_count']==2
     ticket=c.get(f"/api/readers/{r['id']}/ticket");assert ticket.status_code==200 and '<svg' in ticket.json()['svg'];assert ticket.json()['barcode']==r['barcode']
     assert '<svg' in ticket.json()['qr_svg'] and ticket.json()['department']=='Туризм и сервис'
     assert 'viewBox=' in ticket.json()['svg']
     assert 'iin' not in ticket.json() and 'birth_date' not in ticket.json()
-    assert c.get('/api/visits/analytics').json()['today']['visits']==1
+    assert c.get('/api/visits/analytics').json()['today']['visits']==2
     assert c.post('/api/visits',json={'code':'unknown','branch_id':b}).status_code==404
     assert c.post('/api/visits',json={'code':r['barcode'],'branch_id':b,'scanned_by':999}).status_code==422
 

@@ -21,6 +21,9 @@ from .public_catalog import router as public_catalog_router
 app.include_router(public_catalog_router)
 from .student_bridge import router as student_bridge_router
 app.include_router(student_bridge_router)
+from .visit_checkin import public_router as visit_checkin_router, make_staff_router as visit_qr_router
+app.include_router(visit_checkin_router)
+app.include_router(visit_qr_router(auth))
 from .site_content import staff_router as site_staff_router, public_router as site_public_router
 app.include_router(site_staff_router)
 app.include_router(site_public_router)
@@ -329,7 +332,7 @@ app.include_router(readers_router(auth,db))
 @app.middleware('http')
 async def reader_private_responses(request:Request,call_next):
     response=await call_next(request)
-    if request.url.path.startswith(('/api/readers','/api/visits','/api/statistics/attendance','/api/reader-branches','/api/circulation','/api/photo-transfer')):
+    if request.url.path.startswith(('/api/readers','/api/visits','/api/check-in/','/api/statistics/attendance','/api/reader-branches','/api/circulation','/api/photo-transfer')):
         response.headers['Cache-Control']='private, no-store'
         response.headers['X-Content-Type-Options']='nosniff'
         response.headers['Referrer-Policy']='no-referrer'
