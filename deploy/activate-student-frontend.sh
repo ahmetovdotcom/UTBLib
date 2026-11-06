@@ -100,7 +100,7 @@ fi
 lc exec -T app curl -fsS --max-time 15 \
   --resolve libstaff.kaztbu.edu.kz:443:127.0.0.1 https://libstaff.kaztbu.edu.kz/api/health </dev/null
 echo 'Staff HTTPS routing: OK'
-lc exec -T app php scripts/check-utblib-frontend.php </dev/null
+lc exec -T --user www-data app php scripts/check-utblib-frontend.php </dev/null
 # Only this run's disposable Git archive and npm packages; backups stay intact.
 docker run --rm --network none -v "$release_dir/library-source:/build" node:22-bookworm-slim \
   sh -ec 'find /build -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +'
