@@ -11,13 +11,12 @@ type Report = {
   summary:{selected_days:number;active_days:number;average_per_day:number;visits_per_reader:number;peak:{date:string;visits:number}|null};
   breakdown:({key:string;label:string}&Count)[];hours:({hour:number}&Count)[];weekdays:({day:number;label:string}&Count)[];
 };
-const props=defineProps<{api:(path:string,method?:string,body?:any)=>Promise<any>;can:(permission:string)=>boolean;apiBase?:string;title?:string;description?:string;dateFrom?:string;dateTo?:string}>();
-const base=props.apiBase||'/statistics/attendance';
+const props=defineProps<{api:(path:string,method?:string,body?:any)=>Promise<any>;can:(permission:string)=>boolean}>();
 const emit=defineEmits<{reader:[id:number]}>();
 const lists=['branch_id','bucket','faculty','department','education_program','study_group','course','cohort_year','category','status','scanned_by','source','weekday'];
 const labels:Record<string,string>={branch_id:'Пункт обслуживания',bucket:'Группа отчёта',faculty:'Факультет',department:'Кафедра',education_program:'Образовательная программа',study_group:'Учебная группа',course:'Курс',cohort_year:'Год поступления',category:'Категория в карточке',status:'Статус читателя',scanned_by:'Отметил',source:'Точка отметки',weekday:'Дни недели',time_from:'Время с',time_to:'Время до',q:'Читатель'};
 function today(){const p=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Almaty',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());return ['year','month','day'].map(k=>p.find(x=>x.type===k)!.value).join('-');}
-function defaults():Filters{return {date_from:props.dateFrom||today().slice(0,7)+'-01',date_to:props.dateTo||today(),group_by:'day',breakdown:'faculty',q:'',time_from:'',time_to:'',...Object.fromEntries(lists.map(k=>[k,[]]))};}
+function defaults():Filters{return {date_from:today().slice(0,7)+'-01',date_to:today(),group_by:'day',breakdown:'faculty',q:'',time_from:'',time_to:'',...Object.fromEntries(lists.map(k=>[k,[]]))};}
 const form=ref<Filters>(defaults()),data=ref<Report|null>(null),busy=ref(false),error=ref(''),optionError=ref(''),exporting=ref(false),advanced=ref(false);
 const options=ref<Record<string,{value:string;label:string}[]>>({}),dimensions=ref<Record<string,string>>({});
 const metric=ref<'visits'|'unique'>('visits'),chartMode=ref<'period'|'hour'|'weekday'>('period');
@@ -40,11 +39,11 @@ async function load(){
   if(busy.value)return;
   busy.value=true;error.value='';const token=++generation,snapshot=copy(form.value);
   journalGeneration++;journal.value=null;journalFilters.value=null;journalBusy.value=false;journalError.value='';
-  try{const result=await props.api(base+'?'+query(snapshot));if(token!==generation)return;data.value=result;tableOffset.value=0;breakdownOffset.value=0;}
+  try{const result=await props.api('/statistics/attendance?'+query(snapshot));if(token!==generation)return;data.value=result;tableOffset.value=0;breakdownOffset.value=0;}
   catch(e){if(token===generation)error.value=e instanceof Error?e.message:String(e);}
   finally{if(token===generation)busy.value=false;}
 }
-async function loadOptions(){try{const r=await props.api(base+'/options');options.value=r.filters;dimensions.value=r.dimensions;optionError.value='';}catch(e){optionError.value='Не удалось загрузить варианты фильтров. '+String(e);}}
+async function loadOptions(){try{const r=await props.api('/statistics/attendance/options');options.value=r.filters;dimensions.value=r.dimensions;optionError.value='';}catch(e){optionError.value='Не удалось загрузить варианты фильтров. '+String(e);}}
 function iso(value:Date){return value.toISOString().slice(0,10);}
 function preset(kind:string){
   const now=today(),d=new Date(now+'T12:00:00Z');let from=now,to=now;
@@ -60,7 +59,7 @@ async function download(format:'xlsx'|'csv'){
   if(!data.value||exporting.value)return;
   exporting.value=true;error.value='';
   const snapshot=copy(data.value.filters);
-  try{const response=await fetch('/api'+base+'/export?'+query(snapshot)+'&format='+format,{credentials:'same-origin'});
+  try{const response=await fetch('/api/statistics/attendance/export?'+query(snapshot)+'&format='+format,{credentials:'same-origin'});
     if(!response.ok){const d=await response.json();throw Error(typeof d.detail==='string'?d.detail:'Не удалось выгрузить отчёт');}
     const url=URL.createObjectURL(await response.blob()),a=document.createElement('a');a.href=url;a.download='Посещаемость '+snapshot.date_from+' — '+snapshot.date_to+'.'+format;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   }catch(e){error.value=e instanceof Error?e.message:String(e);}finally{exporting.value=false;}
@@ -96,7 +95,7 @@ async function showJournal(row?:Row,bucket?:string,dimensionValue?:string){
 async function loadJournal(){
   if(!journalFilters.value)return;
   const token=++journalGeneration; journalBusy.value=true;journalError.value='';journal.value=null;
-  try{const r=await props.api(base+'/journal?'+query(journalFilters.value)+'&offset='+journalOffset.value);if(token===journalGeneration)journal.value=r;}
+  try{const r=await props.api('/statistics/attendance/journal?'+query(journalFilters.value)+'&offset='+journalOffset.value);if(token===journalGeneration)journal.value=r;}
   catch(e){if(token===journalGeneration)journalError.value=String(e);}
   finally{if(token===journalGeneration)journalBusy.value=false;}
 }
@@ -109,7 +108,7 @@ onUnmounted(()=>{generation++;journalGeneration++;});
 <template>
 <section class="attendance-page" :aria-busy="busy">
   <header class="page-heading">
-    <div><h1>{{title||'Отчёт по посещаемости'}}</h1><p>{{description||'Посещения библиотеки, состав читателей и часы нагрузки. Все даты и время — Алматы.'}}</p></div>
+    <div><h1>Отчёт по посещаемости</h1><p>Посещения библиотеки, состав читателей и часы нагрузки. Все даты и время — Алматы.</p></div>
     <div class="report-actions"><button :disabled="busy||!data" @click="load">Обновить</button><button :disabled="busy||exporting||!data" @click="download('csv')">CSV</button><button class="primary" :disabled="busy||exporting||!data" @click="download('xlsx')">{{exporting?'Выгрузка…':'↓ Скачать Excel'}}</button></div>
   </header>
   <p v-if="optionError" class="error" role="alert">{{optionError}} <button @click="loadOptions">Повторить</button></p>
