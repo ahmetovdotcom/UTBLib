@@ -35,6 +35,7 @@ class IssueLine(Strict):
     reason:str=Field(default='',max_length=2000)
 class IssueInput(Operation):
     reader_id:int=Field(gt=0)
+    branch_id:int=Field(gt=0)
     items:list[IssueLine]=Field(min_length=1,max_length=100)
     override:bool=False
     reason:str=Field(default='',max_length=2000)

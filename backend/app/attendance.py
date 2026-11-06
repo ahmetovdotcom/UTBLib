@@ -101,17 +101,17 @@ def parse_filters(request: Request):
         raise HTTPException(422, '; '.join(e['msg'].removeprefix('Value error, ') for e in error.errors())) from None
 
 
-def bucket_expression():
+def bucket_expression(visit_model=Visit):
     # Every reader belongs to one bucket. Unspecified students are not assumed to be bachelors.
     return case(
-        (Visit.reader_id.is_(None), 'guest'),
+        (visit_model.reader_id.is_(None), 'guest'),
         (or_(Reader.category.in_(['teacher', 'faculty']), Reader.is_teaching_staff.is_(True)), 'faculty'),
         *[(Reader.category == key, key) for key in ('bachelor', 'master', 'staff', 'external', 'doctoral')],
         else_='other',
     )
 
 
-def local_expressions(s):
+def local_expressions(s, visit_model=Visit):
     if s.bind.dialect.name == 'sqlite':
         # Same IANA timezone as PostgreSQL, including Kazakhstan's 2024 offset change.
         def local(value):
@@ -120,7 +120,7 @@ def local_expressions(s):
             if stamp.tzinfo is None: stamp = stamp.replace(tzinfo=timezone.utc)
             return stamp.astimezone(TZ).strftime('%Y-%m-%d %H:%M:%S')
         s.connection().connection.driver_connection.create_function('attendance_local', 1, local, deterministic=True)
-        stamp = func.attendance_local(Visit.scanned_at)
+        stamp = func.attendance_local(visit_model.scanned_at)
         day = func.substr(stamp, 1, 10)
         hour = cast(func.strftime('%H', stamp), Integer)
         minute = hour * 60 + cast(func.strftime('%M', stamp), Integer)
@@ -128,7 +128,7 @@ def local_expressions(s):
         week = func.date(stamp, 'weekday 0', '-6 days')
         month = func.substr(stamp, 1, 7) + '-01'
     else:
-        stamp = func.timezone(str(TZ), Visit.scanned_at)
+        stamp = func.timezone(str(TZ), visit_model.scanned_at)
         day = func.to_char(stamp, 'YYYY-MM-DD')
         hour = cast(func.extract('hour', stamp), Integer)
         minute = hour * 60 + cast(func.extract('minute', stamp), Integer)
@@ -138,22 +138,22 @@ def local_expressions(s):
     return {'day': day, 'week': week, 'month': month, 'hour': hour, 'minute': minute, 'weekday': weekday}
 
 
-def reader_column(key):
-    if key == 'full_name': return func.coalesce(Reader.full_name, Visit.guest_name)
-    if key == 'study_group': return func.coalesce(Reader.study_group, Visit.guest_group)
-    if key == 'course': return func.coalesce(Reader.course, Visit.guest_course)
+def reader_column(key, visit_model=Visit):
+    if key == 'full_name': return func.coalesce(Reader.full_name, visit_model.guest_name)
+    if key == 'study_group': return func.coalesce(Reader.study_group, visit_model.guest_group)
+    if key == 'course': return func.coalesce(Reader.course, visit_model.guest_course)
     return getattr(Reader, key)
 
 
-def query_context(s, f):
-    local, bucket = local_expressions(s), bucket_expression()
+def query_context(s, f, visit_model=Visit, scope=()):
+    local, bucket = local_expressions(s, visit_model), bucket_expression(visit_model)
     start, _ = local_bounds(f.date_from); _, end = local_bounds(f.date_to)
-    conditions = [Visit.scanned_at >= start, Visit.scanned_at < end]
+    conditions = [visit_model.scanned_at >= start, visit_model.scanned_at < end, *scope]
     for key in READER_FILTERS:
         if getattr(f, key):
-            conditions.append(func.coalesce(cast(reader_column(key), String), '').in_(getattr(f, key)))
+            conditions.append(func.coalesce(cast(reader_column(key, visit_model), String), '').in_(getattr(f, key)))
     for key in ('branch_id', 'scanned_by', 'source'):
-        if getattr(f, key): conditions.append(getattr(Visit, key).in_(getattr(f, key)))
+        if getattr(f, key): conditions.append(getattr(visit_model, key).in_(getattr(f, key)))
     if f.bucket: conditions.append(bucket.in_(f.bucket))
     if f.weekday: conditions.append(local['weekday'].in_(f.weekday))
     def minutes(value):
@@ -165,23 +165,23 @@ def query_context(s, f):
         if f.time_to: conditions.append(local['minute'] <= minutes(f.time_to))
     if f.q:
         pattern = '%' + f.q.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
-        conditions.append(or_(*(c.ilike(pattern, escape='\\') for c in (reader_column('full_name'), Reader.ticket_number, Reader.barcode))))
+        conditions.append(or_(*(c.ilike(pattern, escape='\\') for c in (reader_column('full_name', visit_model), Reader.ticket_number, Reader.barcode))))
     def query(*columns):
-        return select(*columns).select_from(Visit).outerjoin(Reader, Reader.id == Visit.reader_id).where(*conditions)
+        return select(*columns).select_from(visit_model).outerjoin(Reader, Reader.id == visit_model.reader_id).where(*conditions)
     return query, local, bucket
 
 
-def counts():
-    return func.count(Visit.id), func.count(func.distinct(Visit.reader_id))
+def counts(visit_model=Visit):
+    return func.count(visit_model.id), func.count(func.distinct(visit_model.reader_id))
 
 
 def blank_row():
     return {'visits': 0, 'unique': 0, 'categories': {key: {'visits': 0, 'unique': 0} for key in BUCKETS}}
 
 
-def grouped(s, query, dimension, bucket):
+def grouped(s, query, dimension, bucket, visit_model=Visit):
     result = {}
-    for period, key, visits, unique in s.execute(query(dimension, bucket, *counts()).group_by(dimension, bucket)):
+    for period, key, visits, unique in s.execute(query(dimension, bucket, *counts(visit_model)).group_by(dimension, bucket)):
         row = result.setdefault(str(period), blank_row())
         row['categories'][key] = {'visits': visits, 'unique': unique}
         row['visits'] += visits
@@ -189,14 +189,14 @@ def grouped(s, query, dimension, bucket):
     return result
 
 
-def report(s, f):
-    query, local, bucket = query_context(s, f)
+def report(s, f, visit_model=Visit, scope=()):
+    query, local, bucket = query_context(s, f, visit_model, scope)
     totals = blank_row()
-    for key, visits, unique in s.execute(query(bucket, *counts()).group_by(bucket)):
+    for key, visits, unique in s.execute(query(bucket, *counts(visit_model)).group_by(bucket)):
         totals['categories'][key] = {'visits': visits, 'unique': unique}
         totals['visits'] += visits; totals['unique'] += unique
-    periods = grouped(s, query, local[f.group_by], bucket)
-    months = grouped(s, query, local['month'], bucket) if f.group_by == 'day' else {}
+    periods = grouped(s, query, local[f.group_by], bucket, visit_model)
+    months = grouped(s, query, local['month'], bucket, visit_model) if f.group_by == 'day' else {}
     dates = [f.date_from + timedelta(days=i) for i in range((f.date_to - f.date_from).days + 1)]
     dates = [d for d in dates if not f.weekday or d.weekday() in f.weekday]
     def period_key(d):
@@ -209,7 +209,7 @@ def report(s, f):
         else: ranges[key][1] = day
     rows = [{'period': key, 'date_from': str(bounds[0]), 'date_to': str(bounds[1]),
              **periods.get(key, blank_row())} for key, bounds in ranges.items()]
-    dimension = reader_column(f.breakdown) if f.breakdown in READER_FILTERS else getattr(Visit, f.breakdown)
+    dimension = reader_column(f.breakdown, visit_model) if f.breakdown in READER_FILTERS else getattr(visit_model, f.breakdown)
     dimension = func.coalesce(cast(dimension, String), '')
     labels = {}
     if f.breakdown == 'branch_id':
@@ -219,12 +219,12 @@ def report(s, f):
     elif f.breakdown in ('source', 'category', 'status'):
         labels = {'source': SOURCES, 'category': CATEGORIES, 'status': STATUSES}[f.breakdown]
     breakdown = [{'key': str(key), 'label': labels.get(str(key), str(key)) or 'Не указано', 'visits': v, 'unique': u}
-                 for key, v, u in s.execute(query(dimension, *counts()).group_by(dimension))]
+                 for key, v, u in s.execute(query(dimension, *counts(visit_model)).group_by(dimension))]
     breakdown.sort(key=lambda row: (-row['visits'], row['label']))
-    daily = list(s.execute(query(local['day'], func.count(Visit.id)).group_by(local['day'])))
+    daily = list(s.execute(query(local['day'], func.count(visit_model.id)).group_by(local['day'])))
     peak = max(daily, key=lambda r: (r[1], r[0]), default=None)
-    hours = {h: (v, u) for h, v, u in s.execute(query(local['hour'], *counts()).group_by(local['hour']))}
-    weekdays = {d: (v, u) for d, v, u in s.execute(query(local['weekday'], *counts()).group_by(local['weekday']))}
+    hours = {h: (v, u) for h, v, u in s.execute(query(local['hour'], *counts(visit_model)).group_by(local['hour']))}
+    weekdays = {d: (v, u) for d, v, u in s.execute(query(local['weekday'], *counts(visit_model)).group_by(local['weekday']))}
     return {
         'filters': f.model_dump(mode='json'), 'timezone': str(TZ), 'rules': RULES,
         'columns': [{'key': key, 'label': label} for key, label in BUCKETS.items()
@@ -241,19 +241,19 @@ def report(s, f):
     }
 
 
-def options(s):
+def options(s, visit_model=Visit):
     result = {}
     for key in READER_FILTERS:
         values = s.scalars(select(func.coalesce(cast(getattr(Reader, key), String), '')).distinct()).all()
         labels = CATEGORIES if key == 'category' else STATUSES if key == 'status' else {}
         if key in ('study_group', 'course'):
-            column = Visit.guest_group if key == 'study_group' else Visit.guest_course
+            column = visit_model.guest_group if key == 'study_group' else visit_model.guest_course
             values += list(s.scalars(select(cast(column, String)).where(column.is_not(None)).distinct()))
         values = set(values) | (set(labels) if labels else {''})
         result[key] = [{'value': v, 'label': labels.get(v, v) or 'Не указано'} for v in sorted(values)]
     result['bucket'] = [{'value': k, 'label': v} for k, v in BUCKETS.items()]
     result['branch_id'] = [{'value': str(b.id), 'label': b.name + ('' if b.active else ' (закрыт)')} for b in s.scalars(select(Branch).order_by(Branch.position, Branch.name))]
-    result['scanned_by'] = [{'value': str(i), 'label': name} for i, name in s.execute(select(User.id, User.display_name).where(User.id.in_(select(Visit.scanned_by))).order_by(User.display_name))]
+    result['scanned_by'] = [{'value': str(i), 'label': name} for i, name in s.execute(select(User.id, User.display_name).where(User.id.in_(select(visit_model.scanned_by))).order_by(User.display_name))]
     result['source'] = [{'value': k, 'label': v} for k, v in SOURCES.items()]
     result['weekday'] = [{'value': str(i), 'label': v} for i, v in enumerate(WEEKDAYS)]
     return {'filters': result, 'dimensions': DIMENSIONS, 'timezone': str(TZ)}
@@ -264,7 +264,7 @@ def export_report(data, f, format, filter_options=None):
     keys = [c['key'] for c in data['columns']]
     def values(row):
         return [row['categories'][key]['visits'] for key in keys] + [row['visits'], row['unique']]
-    table = [['Отчёт по посещаемости'], [f'{f.date_from} — {f.date_to} · {TZ}'],
+    table = [[data.get('title', 'Отчёт по посещаемости')], [f'{f.date_from} — {f.date_to} · {TZ}'],
              ['Период', *[c['label'] for c in data['columns']], 'Всего посещений', 'Уникальных читателей']]
     month_lookup = {m['period'][:7]: m for m in data['months']}
     for i, row in enumerate(data['rows']):
@@ -272,7 +272,7 @@ def export_report(data, f, format, filter_options=None):
         table.append([label, *values(row)])
         if f.group_by == 'day' and (i + 1 == len(data['rows']) or data['rows'][i + 1]['period'][:7] != row['period'][:7]):
             table.append(['Итого за ' + row['period'][:7], *values(month_lookup[row['period'][:7]])])
-    table.extend([['Итого за период', *values(data['totals'])], [], [RULES],
+    table.extend([['Итого за период', *values(data['totals'])], [], [data['rules']],
                   ['Разбивка: ' + DIMENSIONS[f.breakdown], 'Посещений', 'Уникальных читателей']])
     table.extend([[r['label'], r['visits'], r['unique']] for r in data['breakdown']])
     table.extend([[], ['Час (Алматы)', 'Посещений', 'Уникальных читателей']])
@@ -313,6 +313,23 @@ def export_report(data, f, format, filter_options=None):
     return Response(out.getvalue(), media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', headers=headers)
 
 
+def journal_report(s, f, offset=0, limit=50, visit_model=Visit, scope=()):
+    query, _, bucket = query_context(s, f, visit_model, scope)
+    total = s.scalar(query(func.count(visit_model.id)))
+    stmt = query(visit_model.id, visit_model.reader_id, visit_model.scanned_at, reader_column('full_name', visit_model).label('full_name'), Reader.ticket_number,
+                 Reader.category, Reader.faculty, reader_column('study_group', visit_model).label('study_group'), reader_column('course', visit_model).label('course'), Branch.name.label('branch'),
+                 User.display_name.label('actor'), visit_model.source, bucket.label('bucket'))
+    stmt = stmt.join(Branch, Branch.id == visit_model.branch_id).outerjoin(User, User.id == visit_model.scanned_by)
+    items = []
+    for row in s.execute(stmt.order_by(visit_model.scanned_at.desc(), visit_model.id.desc()).offset(offset).limit(limit)):
+        item = dict(row._mapping); stamp = item['scanned_at']
+        if stamp.tzinfo is None: stamp = stamp.replace(tzinfo=timezone.utc)
+        item['scanned_at'] = stamp.isoformat()
+        item['actor'] = item['actor'] or ('Без входа' if item['source'] == 'qr_guest' else 'Самостоятельно')
+        items.append(item)
+    return {'items': items, 'total': total}
+
+
 def make_router(auth, db):
     router = APIRouter(prefix='/api/statistics/attendance', dependencies=[Depends(auth)])
 
@@ -331,19 +348,6 @@ def make_router(auth, db):
     @router.get('/journal')
     def journal(f=Depends(parse_filters), offset: int = Query(0, ge=0),
                 limit: int = Query(50, ge=1, le=100), s=Depends(db)):
-        query, _, bucket = query_context(s, f)
-        total = s.scalar(query(func.count(Visit.id)))
-        stmt = query(Visit.id, Visit.reader_id, Visit.scanned_at, reader_column('full_name').label('full_name'), Reader.ticket_number,
-                     Reader.category, Reader.faculty, reader_column('study_group').label('study_group'), reader_column('course').label('course'), Branch.name.label('branch'),
-                     User.display_name.label('actor'), Visit.source, bucket.label('bucket'))
-        stmt = stmt.join(Branch, Branch.id == Visit.branch_id).outerjoin(User, User.id == Visit.scanned_by)
-        items = []
-        for row in s.execute(stmt.order_by(Visit.scanned_at.desc(), Visit.id.desc()).offset(offset).limit(limit)):
-            item = dict(row._mapping); stamp = item['scanned_at']
-            if stamp.tzinfo is None: stamp = stamp.replace(tzinfo=timezone.utc)
-            item['scanned_at'] = stamp.isoformat()
-            item['actor'] = item['actor'] or ('Без входа' if item['source'] == 'qr_guest' else 'Самостоятельно')
-            items.append(item)
-        return {'items': items, 'total': total}
+        return journal_report(s, f, offset, limit)
 
     return router

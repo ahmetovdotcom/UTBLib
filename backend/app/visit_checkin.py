@@ -90,6 +90,9 @@ def record_visit(s, branch_id, *, reader=None, actor=None, source='qr_account', 
 def point_info(token: str, s=Depends(get_db)):
     if len(token) != 43:
         raise HTTPException(404, 'QR-код недействителен')
+    from .events import event_by_token, public_info
+    event = event_by_token(s, token)
+    if event is not None: return public_info(event)
     branch = active_point(s, token)
     return {'name': branch.name}
 
@@ -123,24 +126,31 @@ def check_in(body: CheckIn, subject=Depends(assertion), s=Depends(get_db)):
     # Public browsers cannot sign requests. library supplies either the verified AD
     # subject or its own anonymous session UUID; guest data grants no account access.
     rate_limit(s, subject, 'qr-visit', 15)
-    branch = active_point(s, body.token)
-    lock_request(s, 'visit-point:', branch.id)
-    # Recheck after locking so rotation/deactivation cannot race the write.
-    s.expire_all()
-    branch = active_point(s, body.token)
+    from .events import event_by_token, record_attendance
+    event = event_by_token(s, body.token)
+    if event is None:
+        branch = active_point(s, body.token)
+        lock_request(s, 'visit-point:', branch.id)
+        s.expire_all()
+        branch = active_point(s, body.token)
+    def save(**kwargs):
+        if event is not None:
+            return record_attendance(s, event.id, token=body.token, **kwargs)
+        return record_visit(s, branch.id, **kwargs)
     if subject.startswith('guest:'):
         if body.full_name is None or body.study_group is None or body.course is None:
             raise HTTPException(422, 'Заполните ФИО, группу и курс')
         data = json.dumps([subject, body.full_name.casefold(), body.study_group.casefold(), body.course], ensure_ascii=False)
         key = hmac.new(os.environ['STUDENT_BRIDGE_KEY'].encode(), data.encode(), hashlib.sha256).hexdigest()
-        visit, duplicate = record_visit(s, branch.id, source='qr_guest', guest=body, guest_key=key)
+        visit, duplicate = save(source='qr_guest', guest=body, guest_key=key)
     else:
         if any(v is not None for v in (body.full_name, body.study_group, body.course)):
             raise HTTPException(422, 'Данные читателя берутся из его учётной записи')
         reader = reader_for_subject(s, subject)
-        visit, duplicate = record_visit(s, branch.id, reader=reader)
-    result = {'duplicate': duplicate, 'scanned_at': iso(visit.scanned_at), 'branch': branch.name,
+        visit, duplicate = save(reader=reader)
+    result = {'duplicate': duplicate, 'scanned_at': iso(visit.scanned_at), 'branch': event.title if event is not None else branch.name,
               'verification': 'self_reported' if subject.startswith('guest:') else 'account'}
+    if event is not None: result['kind'] = 'event'
     s.commit()
     return result
 

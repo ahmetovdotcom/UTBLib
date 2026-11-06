@@ -8,7 +8,7 @@ type Row=Counts&{key:string;label:string;record_id?:number;author?:string;descri
 type Report={filters:Filters;dimension:string;totals:Counts;rows:Row[];trend:(Counts&{period:string})[];trend_unit:string;rules:string};
 const props=defineProps<{api:(path:string,method?:string,body?:any)=>Promise<any>;can:(p:string)=>boolean}>();
 const emit=defineEmits<{record:[id:number]}>();
-const labels:Record<string,string>={kind:'Категория литературы',literature_type:'Вид литературы',specialty:'Специальность',discipline:'Дисциплина',language:'Язык',document_type:'Тип документа',branch_id:'Пункт обслуживания',category:'Категория читателя'};
+const labels:Record<string,string>={kind:'Категория литературы',literature_type:'Вид литературы',specialty:'Специальность',discipline:'Дисциплина',language:'Язык',document_type:'Тип документа',branch_id:'Пункт выдачи (абонемент)',category:'Категория читателя'};
 const dimensions={record:'Библиографическая запись',...labels};
 function today(){const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Almaty',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());return ['year','month','day'].map(k=>parts.find(x=>x.type===k)!.value).join('-');}
 function defaults():Filters{return {date_from:today().slice(0,7)+'-01',date_to:today(),group_by:'record',q:'',...Object.fromEntries(Object.keys(labels).map(k=>[k,[]]))};}
@@ -49,7 +49,7 @@ onMounted(()=>{loadOptions();load();});onUnmounted(()=>generation++);
   <div class="presets"><span>Период:</span><button type="button" :disabled="busy" @click="preset('today')">Сегодня</button><button type="button" :disabled="busy" @click="preset('month')">Этот месяц</button><button type="button" :disabled="busy" @click="preset('previous')">Прошлый месяц</button><button type="button" :disabled="busy" @click="preset('year')">Этот год</button><button type="button" :disabled="busy" @click="preset('academic')">Учебный год</button></div>
   <label class="title-search">Название, автор, ISBN или номер библиографической записи<input v-model="form.q" type="search" placeholder="Например, Қаржы" maxlength="200"></label>
   <div class="filter-grid"><AttendanceFilter v-for="(label,key) in labels" :key="key" :label="label" :model-value="form[key] as string[]" :options="options[key]||[]" @update:model-value="form[key]=$event" /></div>
-  <p class="help">Специальность и дисциплина — из карточки книги. Внутри фильтра достаточно одного совпадения; разные фильтры применяются вместе. Варианты показаны по книгам, которые уже выдавались.</p>
+  <p class="help">Специальность и дисциплина — из карточки книги. Внутри фильтра достаточно одного совпадения; разные фильтры применяются вместе. Пункт выдачи — абонемент, выбранный при оформлении выдачи. Варианты показаны по книгам, которые уже выдавались.</p>
   <p v-if="optionError" role="alert">{{optionError}} <button type="button" @click="loadOptions">Повторить</button></p>
   <div class="filter-footer"><span>{{dirty?'Параметры изменены. Нажмите «Сформировать».':'Итоги, диаграммы и выгрузка используют одни и те же фильтры.'}}</span><div><button type="button" :disabled="busy" @click="reset">Сбросить</button><button class="primary" :disabled="busy">{{busy?'Расчёт…':'Сформировать'}}</button></div></div>
  </form>

@@ -31,7 +31,9 @@ def make_router(auth,db):
         return [svc.snapshot(n) for n in s.scalars(select(CirculationNotice).where(CirculationNotice.reader_id.in_(select(Reader.id).where(Reader.user_id==user.id))).order_by(CirculationNotice.id.desc()).limit(50))]
     @router.get('/options')
     def options(s=Depends(db)):
-        return {'policy':svc.policy(s).model_dump(mode='json'),'branches':[svc.snapshot(b) for b in s.scalars(select(Branch).where(Branch.active.is_(True)))],'timezone':'Asia/Almaty'}
+        branches=[svc.snapshot(b) for b in s.scalars(select(Branch).order_by(Branch.position,Branch.name,Branch.id))]
+        return {'policy':svc.policy(s).model_dump(mode='json'),'branches':[b for b in branches if b['active']],
+                'history_branches':branches,'timezone':'Asia/Almaty'}
     @router.get('/dashboard')
     def dashboard(s=Depends(db)):
         a,b=local_bounds(svc.today())

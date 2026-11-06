@@ -37,6 +37,9 @@ PERMISSIONS={
  'readers.ticket.print':'Печать читательского билета',
  'readers.source.import':'Поиск и загрузка читателей из AD / Platonus',
  'readers.sync.admin':'Администрирование синхронизации читателей',
+ 'events.view':'Просмотр мероприятий и статистики',
+ 'events.manage':'Создание и изменение мероприятий, QR',
+ 'events.record':'Регистрация участников мероприятий',
  'visits.record':'Регистрация посещений',
  'visits.view':'Журнал и статистика посещений',
  'catalog.view':'Просмотр каталога и экземпляров',
@@ -55,7 +58,7 @@ PERMISSIONS={
  'import.run':'Импорт MARCSQL',
 }
 PRESETS={'viewer':['catalog.view'],'librarian':['catalog.view','catalog.edit','copies.edit','acquisitions.view','acquisitions.edit','withdrawals.view']}
-PRESETS['librarian']+=['readers.registry.view','visits.record','circulation.issue','circulation.return','circulation.renew','circulation.view_own_history','reservations.manage']
+PRESETS['librarian']+=['readers.registry.view','visits.record','events.view','events.record','circulation.issue','circulation.return','circulation.renew','circulation.view_own_history','reservations.manage']
 PRESETS['manager']=list(PERMISSIONS)
 PRESETS['reader']=['loans.view_own','loans.renew_own']
 COOKIE='library_session'
@@ -136,6 +139,9 @@ def permission_for(method,path):
         if path.endswith('/sync-status'): return 'readers.sync.admin'
         if path.endswith('/ticket'): return 'readers.ticket.print'
         return 'readers.registry.view' if method=='GET' else 'readers.registry.edit'
+    if path.startswith('/api/events'):
+        if method == 'GET': return 'events.view'
+        return 'events.record' if path.endswith('/attendance') and method == 'POST' else 'events.manage'
     if path.startswith('/api/visits'): return 'visits.record' if method=='POST' or path.endswith('/lookup') else 'visits.view'
     if path.startswith('/api/settings-transfer/'): return 'settings.edit'
     if path in ('/api/catalog-attention','/api/catalog-attention/options') and method=='GET': return 'catalog.view'

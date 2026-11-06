@@ -6,7 +6,7 @@ from contextlib import contextmanager
 import pytest
 from sqlalchemy import select,func
 from app.db import Base,User,Copy,Record,DocumentType,utcnow
-from app.reader_models import Reader,LibraryVisit
+from app.reader_models import Reader,LibraryVisit,Branch
 from app.circulation_models import *
 from app.circulation_service import today,end_day,sweep,suggested
 from app.main import app,db
@@ -20,18 +20,22 @@ def session():
 
 def seed(n=3):
     with session() as s:
+        s.add(Branch(code='TEST-DESK',name='Тестовый абонемент'))
         t=DocumentType(name='Тест книги',config=[]);s.add(t);s.flush()
         r=Record(type_id=t.id,version=1,marc={'leader':'00000nam a2200000   4500','fields':[{'tag':'245','subfields':[{'code':'a','value':'Тестовая книга'}]},{'tag':'020','subfields':[{'code':'a','value':'978-601-04-3364-9'}]}]},search_text='тестовая книга 978-601-04-3364-9');s.add(r);s.flush()
         readers=[Reader(full_name='Тест '+str(i),category='student',ticket_number='TEST'+str(i),barcode='RDR-TEST'+str(i)) for i in range(3)];s.add_all(readers)
         copies=[Copy(record_id=r.id,request_key=str(uuid4()),payload_hash='test',inventory_number='00'+str(i),barcode='BC00'+str(i),sigla='Тест',note='') for i in range(n)];s.add_all(copies);s.commit()
         return [v.id for v in readers],[v.id for v in copies],r.id
 
-def issue(c,r,copies,**kwargs):return c.post('/api/circulation/issue',json={'request_key':str(uuid4()),'reader_id':r,'items':[{'copy_id':x} for x in copies],**kwargs})
+def desk_id():
+    with session() as s:return s.scalar(select(Branch.id).where(Branch.code=='TEST-DESK'))
+
+def issue(c,r,copies,**kwargs):return c.post('/api/circulation/issue',json={'request_key':str(uuid4()),'reader_id':r,'branch_id':desk_id(),'items':[{'copy_id':x} for x in copies],**kwargs})
 def close(c,id,**kwargs):return c.post(f'/api/circulation/loans/{id}/return',json={'request_key':str(uuid4()),'version':1,**kwargs})
 def renew(c,id,**kwargs):return c.post(f'/api/circulation/loans/{id}/renew',json={'request_key':str(uuid4()),'version':1,**kwargs})
 
 def test_basket_repeat_history_and_no_visit(client):
-    readers,copies,_=seed();body={'request_key':str(uuid4()),'reader_id':readers[0],'items':[{'copy_id':c} for c in copies[:2]]}
+    readers,copies,_=seed();body={'request_key':str(uuid4()),'reader_id':readers[0],'branch_id':desk_id(),'items':[{'copy_id':c} for c in copies[:2]]}
     first=client.post('/api/circulation/issue',json=body);assert first.status_code==200,first.text
     assert client.post('/api/circulation/issue',json=body).json()==first.json()
     with session() as s:
@@ -135,7 +139,7 @@ def test_policy_scale_and_local_time(client,count,days):
 def test_due_hard_cap_and_invalid_return(client):
     readers,copies,_=seed()
     assert issue(client,readers[0],[],items=[]).status_code==422
-    body={'request_key':str(uuid4()),'reader_id':readers[0],'items':[{'copy_id':copies[0],'due_on':str(today()+timedelta(days=366)),'reason':'Особый срок'}]}
+    body={'request_key':str(uuid4()),'reader_id':readers[0],'branch_id':desk_id(),'items':[{'copy_id':copies[0],'due_on':str(today()+timedelta(days=366)),'reason':'Особый срок'}]}
     assert client.post('/api/circulation/issue',json=body).status_code==422
     id=issue(client,readers[0],[copies[0]]).json()['loans'][0]['id']
     assert close(client,id,condition='lost',incident='none').status_code==422
@@ -151,7 +155,7 @@ def test_permissions_and_local_only(client,monkeypatch):
     assert issue(client,readers[0],[copies[1]],override=True,reason='Нельзя обходить').status_code==403
     assert client.get('/api/circulation/fines').status_code==403
     assert client.get('/api/readers/'+str(readers[0])).status_code==403
-    assert client.post('/api/circulation/issue',json={'request_key':str(uuid4()),'reader_id':readers[0],'items':[{'copy_id':copies[1]}]},headers={'X-CSRF-Token':'bad'}).status_code==403
+    assert client.post('/api/circulation/issue',json={'request_key':str(uuid4()),'reader_id':readers[0],'branch_id':desk_id(),'items':[{'copy_id':copies[1]}]},headers={'X-CSRF-Token':'bad'}).status_code==403
 
 def test_own_account_scope_and_foreign_renewal(client):
     from app.security import password_hash

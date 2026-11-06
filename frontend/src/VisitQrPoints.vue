@@ -1,32 +1,32 @@
 <script setup lang="ts">
 import {ref,nextTick} from 'vue';
-const props=defineProps<{api:(path:string,method?:string,body?:any)=>Promise<any>,branches:any[]}>();
+const props=defineProps<{api:(path:string,method?:string,body?:any)=>Promise<any>,branches:any[];eventId?:number}>();
 const dialog=ref<HTMLDialogElement|null>(null),branch=ref<number|null>(null),busy=ref(false),error=ref(''),point=ref<any>(null);
 const origin=ref(localStorage.getItem('visit-qr-origin') || (['localhost','127.0.0.1'].includes(location.hostname)?'http://localhost:8098':'https://elibrary.kaztbu.edu.kz'));
 async function open(){point.value=null;error.value='';branch.value=props.branches[0]?.id||null;await nextTick();dialog.value?.showModal();}
 async function prepare(rotate=false,enabled?:boolean){
  if(rotate&&!confirm('Заменить QR-код? Ранее распечатанный код перестанет работать.'))return;
  busy.value=true;error.value='';
- try{point.value=await props.api('/visits/qr-points/'+branch.value,'POST',{base_url:origin.value,rotate,enabled});localStorage.setItem('visit-qr-origin',origin.value);}catch(e){error.value=String(e);}finally{busy.value=false;}
+ try{point.value=await props.api(props.eventId?'/events/'+props.eventId+'/qr':'/visits/qr-points/'+branch.value,'POST',{base_url:origin.value,rotate,enabled});localStorage.setItem('visit-qr-origin',origin.value);}catch(e){error.value=String(e);}finally{busy.value=false;}
 }
 function print(){
  const w=window.open('','_blank');if(!w){error.value='Разрешите открытие окна для печати.';return;}
  const escape=(v:string)=>v.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
- w.document.write(`<!doctype html><html lang="ru"><meta charset="utf-8"><title>Посещение библиотеки</title><style>body{font:22px Arial;text-align:center;color:#052744;margin:30mm 15mm}h1{font-size:30px}svg{display:block;width:95mm;height:95mm;margin:12mm auto}p{line-height:1.6}small{font-size:12px;overflow-wrap:anywhere}@page{size:A4;margin:12mm}</style><h1>${escape(point.value.name)}</h1><h2>Отметьте посещение библиотеки</h2>${point.value.qr_svg}<p>Отсканируйте QR-код камерой телефона.<br>Войдите в кабинет или укажите ФИО, группу и курс.</p><small>${escape(point.value.link)}</small></html>`);
+ w.document.write(`<!doctype html><html lang="ru"><meta charset="utf-8"><title>Посещение библиотеки</title><style>body{font:22px Arial;text-align:center;color:#052744;margin:30mm 15mm}h1{font-size:30px}svg{display:block;width:95mm;height:95mm;margin:12mm auto}p{line-height:1.6}small{font-size:12px;overflow-wrap:anywhere}@page{size:A4;margin:12mm}</style><h1>${escape(point.value.name)}</h1><h2>${props.eventId?'Отметьте участие в мероприятии':'Отметьте посещение библиотеки'}</h2>${point.value.qr_svg}<p>Отсканируйте QR-код камерой телефона.<br>Войдите в кабинет или укажите ФИО, группу и курс.</p><small>${escape(point.value.link)}</small></html>`);
  w.document.close();w.focus();w.print();
 }
 </script>
 <template>
- <button type="button" @click="open">▦ QR для посетителей</button>
+ <button type="button" @click="open">▦ {{eventId?'QR мероприятия':'QR для посетителей'}}</button>
  <dialog ref="dialog" class="visit-qr-dialog" aria-labelledby="visit-qr-title">
-  <div class="qr-heading"><h2 id="visit-qr-title">QR-коды пунктов обслуживания</h2><button type="button" @click="dialog?.close()" aria-label="Закрыть">✕</button></div>
-  <p>Для каждого пункта — постоянный QR. Распечатайте его и разместите у входа.</p>
+  <div class="qr-heading"><h2 id="visit-qr-title">{{eventId?'QR-код мероприятия':'QR-коды пунктов обслуживания'}}</h2><button type="button" @click="dialog?.close()" aria-label="Закрыть">✕</button></div>
+  <p>{{eventId?'Отдельный QR для этого мероприятия. Отметка доступна в даты проведения, пока мероприятие не завершено и не отменено.':'Для каждого пункта — постоянный QR. Распечатайте его и разместите у входа.'}}</p>
   <p v-if="error" role="alert" class="error">{{error}}</p>
   <form @submit.prevent="prepare()">
-   <label>Пункт обслуживания<select v-model="branch" :disabled="busy" @change="point=null"><option v-for="b in branches" :key="b.id" :value="b.id">{{b.name}}</option></select></label>
+   <label v-if="!eventId">Пункт обслуживания<select v-model="branch" :disabled="busy" @change="point=null"><option v-for="b in branches" :key="b.id" :value="b.id">{{b.name}}</option></select></label>
    <label>Адрес сайта для читателей<input v-model="origin" type="url" required :disabled="busy" @input="point=null" placeholder="https://elibrary.kaztbu.edu.kz"></label>
    <p class="muted">Для телефона нужен доступный ему адрес сайта. localhost открывается только на этом компьютере.</p>
-   <button class="primary" :disabled="busy||!branch">{{busy?'Подготовка…':'Показать QR-код'}}</button>
+   <button class="primary" :disabled="busy||(!eventId&&!branch)">{{busy?'Подготовка…':'Показать QR-код'}}</button>
   </form>
   <div v-if="point" class="qr-result">
    <h3>{{point.name}}</h3><p v-if="!point.enabled" class="error">Этот QR-код отключён.</p>

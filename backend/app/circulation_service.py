@@ -152,6 +152,8 @@ def queue(s,rid,actor=None):
         res.assigned_copy_id=c.id;res.assigned_at=utcnow();res.expires_at=utcnow()+timedelta(days=p.preparation_days);reservation_change(s,res,'confirmed',actor,'Экземпляр выделен; сотрудник должен подтвердить готовность')
 
 def issue(s,actor,body):
+    branch=s.get(Branch,body.branch_id)
+    if not branch or not branch.active:fail('Выберите действующий пункт выдачи (абонемент)',422)
     r=reader(s,body.reader_id);p=policy(s)
     ids=[x.copy_id for x in body.items]
     if len(set(ids))!=len(ids):fail('Один экземпляр добавлен дважды',422)
@@ -171,13 +173,14 @@ def issue(s,actor,body):
         if own and own.assigned_copy_id and own.status!='ready_for_pickup':fail('Собственная бронь ещё не готова к получению')
         due,count,days=suggested(s,c,p);actual=due_date(s,c,r,p,actor,item.due_on,due,item.reason)
         before=snapshot(d)
-        loan=Loan(reader_id=r.id,copy_id=c.id,branch_id=d.branch_id,due_at=actual,calculated_due_at=due,issued_by=actor.id,status='active',notes=body.reason)
+        # The issuing desk is independent of the copy's home/storage location.
+        loan=Loan(reader_id=r.id,copy_id=c.id,branch_id=branch.id,due_at=actual,calculated_due_at=due,issued_by=actor.id,status='active',notes=body.reason)
         s.add(loan);s.flush();d.issue_count+=1
         copy_history(s,c,d,before,'issued',actor,loan,r.id)
-        event(s,loan,'issued',actor,details={'reason':item.reason,'override_reason':body.reason,'copy_count':count,'period_days':days,'calculated_due_at':due})
+        event(s,loan,'issued',actor,details={'reason':item.reason,'override_reason':body.reason,'copy_count':count,'period_days':days,'calculated_due_at':due,'branch_id':branch.id,'branch_name':branch.name})
         if own:reservation_change(s,own,'fulfilled',actor,'Исполнено выдачей №'+str(loan.id));release.add(rid)
         notice(s,r.id,'issued',f'issued:{loan.id}',{'due_at':actual,'title':title(s,c)},loan.id)
-        results.append({'id':loan.id,'copy_id':c.id,'inventory_number':c.inventory_number,'title':title(s,c),'due_at':actual})
+        results.append({'id':loan.id,'copy_id':c.id,'inventory_number':c.inventory_number,'title':title(s,c),'due_at':actual,'branch_id':branch.id,'branch_name':branch.name})
     s.flush()
     for rid in sorted(release):queue(s,rid,actor)
     return {'loans':results}
@@ -236,7 +239,9 @@ def return_loan(s,actor,id,body):
 
 def loan_output(s,l):
     c=s.get(Copy,l.copy_id);r=s.get(Reader,l.reader_id)
+    branch=s.get(Branch,l.branch_id) if l.branch_id else None
     return {**snapshot(l),'status':'overdue' if not l.closed_at and aware(l.due_at)<utcnow() else l.status,'title':title(s,c),
+     'branch_name':branch.name if branch else None,
      'inventory_number':c.inventory_number,'barcode':c.barcode,'reader_name':r.full_name,'ticket_number':r.ticket_number,
      'issued_by_name':s.get(User,l.issued_by).display_name,'returned_to_name':s.get(User,l.returned_to).display_name if l.returned_to else None,
      'days_remaining':(aware(l.due_at).astimezone(TZ).date()-today()).days}

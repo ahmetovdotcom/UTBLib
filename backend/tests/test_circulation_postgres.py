@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
 from app.db import Base,User,Copy,Record,DocumentType
-from app.reader_models import Reader
+from app.reader_models import Reader,Branch
 from app.circulation_models import Loan,Reservation,CirculationNotice
 from app.circulation_schemas import IssueInput,RenewInput,ReturnInput
 from app import circulation_service as svc
@@ -22,6 +22,7 @@ def factory():
     scoped=engine.execution_options(schema_translate_map={None:schema});Base.metadata.create_all(scoped);factory=sessionmaker(scoped)
     with factory() as s:
         s.add(User(id=1,username='test-admin',display_name='Test admin',role='admin',password_hash='unused',permissions=[]))
+        s.add(Branch(id=1,code='TEST-DESK',name='Test desk'))
         s.add(DocumentType(id=1,name='Test',config=[]));s.flush()
         s.add(Record(id=1,type_id=1,marc={'fields':[{'tag':'245','subfields':[{'code':'a','value':'Test'}]}]},search_text='test'))
         s.add_all([Reader(id=i,full_name='Test '+str(i),ticket_number='T'+str(i),barcode='R'+str(i),category='student',limits_override={'max_active_loans':1}) for i in (1,2)])
@@ -33,7 +34,7 @@ def factory():
 
 def issue(factory,rid,cid,key=None):
     with factory() as s:
-        user=s.get(User,1);body=IssueInput(request_key=key or uuid4(),reader_id=rid,items=[{'copy_id':cid}])
+        user=s.get(User,1);body=IssueInput(request_key=key or uuid4(),reader_id=rid,branch_id=1,items=[{'copy_id':cid}])
         try:return svc.operation(s,user,'issue',body,lambda:svc.issue(s,user,body))
         except HTTPException as exc:s.rollback();return exc.status_code
 
@@ -69,7 +70,7 @@ def test_failed_basket_rolls_back_notices_and_profile_lock(factory):
     issue(factory,1,1)
     with factory() as s:
         user=s.get(User,1);r=s.get(Reader,2);r.limits_override={'max_active_loans':3};s.commit()
-        body=IssueInput(request_key=uuid4(),reader_id=2,items=[{'copy_id':2},{'copy_id':1}])
+        body=IssueInput(request_key=uuid4(),reader_id=2,branch_id=1,items=[{'copy_id':2},{'copy_id':1}])
         with pytest.raises(HTTPException):svc.operation(s,user,'issue',body,lambda:svc.issue(s,user,body))
         s.rollback()
         assert s.scalar(select(func.count()).select_from(Loan))==1
