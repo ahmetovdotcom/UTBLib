@@ -36,7 +36,9 @@ function query(){return new URLSearchParams(Object.entries(filters.value).filter
 async function run(fn:()=>Promise<void>){if(busy.value)return;busy.value=true;error.value='';try{await fn();}catch(e){error.value=String(e);}finally{busy.value=false;}}
 async function load(){const result=await props.api('/readers?'+query()+'&offset='+offset.value);items.value=result.items;total.value=result.total;}
 async function search(){offset.value=0;await run(load);}
-async function open(id:number){await run(async()=>{card.value=await props.api('/readers/'+id);editing.value=false;cardTab.value='overview';loanHistory.value=null;historyOffset.value=0;accounts.value=null;ticket.value=null;window.scrollTo(0,0);});}
+// Cross-page links can call open() while the initial registry load still holds busy.
+let initialization:Promise<void>=Promise.resolve();
+async function open(id:number){await initialization;await run(async()=>{card.value=await props.api('/readers/'+id);editing.value=false;cardTab.value='overview';loanHistory.value=null;historyOffset.value=0;accounts.value=null;ticket.value=null;window.scrollTo(0,0);});}
 function create(){cardTab.value='data';window.scrollTo(0,0);card.value={full_name:'',category:'student',status:'active',block_reason:'',branch_ids:[],manual_overrides:[],preferred_branch_id:null,field_owners:{}};editing.value=true;ticket.value=null;}
 async function save(){await run(async()=>{const source=card.value;const allowed=['full_name','category','status','block_reason','gender','is_teaching_staff','preferred_branch_id','branch_ids','manual_overrides','version',...fields.map(f=>f[0]),...(props.can('readers.personal_data.view')?personalFields.map(f=>f[0]):[])];const body:any={};for(const key of allowed){if(source[key]!==undefined){body[key]=source[key];if(['iin','birth_date','valid_until','reregistered_at','course','cohort_year'].includes(key)&&body[key]==='')body[key]=null;}}const result=await props.api('/readers'+(source.id?'/'+source.id:''),source.id?'PUT':'POST',body);card.value=await props.api('/readers/'+result.id);editing.value=false;notice.value='Карточка сохранена';await load();await loadOverview();});}
 async function uploadPhoto(event:Event){const file=(event.target as HTMLInputElement).files?.[0];if(!file)return;if(file.size>3000000){error.value='Фото должно быть не больше 3 МБ';return;}await run(async()=>{const content=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=reject;reader.readAsDataURL(file);});await props.api('/readers/'+card.value.id+'/photo','POST',{content});card.value.has_photo=true;card.value.photoVersion=Date.now();notice.value='Фото сохранено';});}
@@ -51,7 +53,7 @@ async function saveBranch(b:any){await run(async()=>{await props.api('/reader-br
 async function addBranch(){await run(async()=>{await props.api('/reader-branches','POST',{code:branchCode.value,name:branchName.value});branches.value=await props.api('/reader-branches');branchCode.value='';branchName.value='';});}
 function runCount(r:any,key:string){return r.source==='nightly'?Object.values(r.counts).reduce((sum:number,c:any)=>sum+Number(c?.[key]||0),0):Number(r.counts[key]||0);}
 function dateTime(v:string){return v?new Date(v.endsWith('Z')||/[+-]\d\d:\d\d$/.test(v)?v:v+'Z').toLocaleString('ru-RU',{timeZone:'Asia/Almaty'}):'—';}
-onMounted(()=>run(async()=>{[options.value,branches.value]=await Promise.all([props.api('/readers/options'),props.api('/reader-branches')]);await Promise.all([load(),loadOverview()]);}));
+onMounted(()=>{initialization=run(async()=>{[options.value,branches.value]=await Promise.all([props.api('/readers/options'),props.api('/reader-branches')]);await Promise.all([load(),loadOverview()]);});});
 defineExpose({open});
 </script>
 <template>
