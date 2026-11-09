@@ -1,17 +1,25 @@
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
-from sqlalchemy import select, func
+import pytest
+from sqlalchemy import select, func, text
 
 from test_catalog import client
 from app.main import app
-from app.db import Copy, CopyHistory
+from app.db import Copy, CopyHistory, CopyDeletion
 from app.marcsql_copies import MarcsqlCopySource
 from test_copy_ksu import book, ksu, copy, edit, report
 from test_acquisitions import add_body
 from test_stock_operations import correction, withdrawal
 from test_circulation import seed, issue, close, session
 from test_security import add, login
+
+
+@pytest.fixture(autouse=True)
+def enforce_foreign_keys(client):
+    with session() as s:
+        s.execute(text('PRAGMA foreign_keys=ON'))
+        assert s.scalar(text('PRAGMA foreign_keys'))==1
 
 
 def delete(c, item, body=None):
@@ -29,14 +37,14 @@ def test_delete_excludes_from_fund_and_ksu_preserving_source_and_history(client)
     body={'version':item['version'],'request_key':str(uuid4())}
     response=delete(client,item,body)
     assert response.status_code==200,response.text
-    assert response.json()['status']=='cancelled'
+    assert response.json()['status']=='deleted'
     assert response.json()['version']==item['version']+1
     assert delete(client,item,body).json()==response.json()
     assert delete(client,item,{**body,'version':2}).status_code==409
-    assert delete(client,item).status_code==409
+    assert delete(client,item).status_code==404
     holdings=client.get(f"/api/records/{r['id']}/copies").json()
-    assert holdings['active']==1 and holdings['total']==2
-    assert not next(c for c in holdings['items'] if c['id']==item['id'])['can_edit']
+    assert holdings['active']==1 and holdings['total']==1
+    assert all(c['id']!=item['id'] for c in holdings['items'])
     assert client.get('/api/statistics/book-fund').json()['totals']['total']==1
     assert report(client)['totals']['copies']==1
     assert report(client)['totals']['on_amount']=='100.25'
@@ -46,10 +54,12 @@ def test_delete_excludes_from_fund_and_ksu_preserving_source_and_history(client)
     assert client.get(f"/api/records/{r['id']}").status_code==200
     history=client.get(f"/api/copies/{item['id']}/history").json()
     assert len(history)==1 and history[0]['before']['status']=='active'
-    assert history[0]['after']['action']=='delete' and history[0]['after']['actor_id']==1
+    assert history[0]['after']['action']=='delete_permanently' and history[0]['after']['actor_id']==1
     with session() as s:
-        assert s.scalar(select(MarcsqlCopySource)).copy_id==item['id']
-        assert s.get(Copy,item['id']).inventory_number==item['inventory_number']
+        assert s.scalar(select(MarcsqlCopySource)).copy_id is None
+        assert s.get(Copy,item['id']) is None
+        assert s.scalar(select(func.count()).select_from(CopyHistory))==0
+        assert s.get(CopyDeletion,item['id']).snapshot['copy']['inventory_number']==item['inventory_number']
 
 
 def test_delete_receipt_copy_updates_quantity_amount_version_and_audit(client):
@@ -101,7 +111,7 @@ def test_delete_blocks_stale_form_and_withdrawn_copy_without_side_effects(client
     assert delete(client,{'id':999999,'version':1}).status_code==404
 
 
-def test_delete_blocks_loans_and_reservations_then_preserves_closed_loan(client):
+def test_delete_blocks_active_and_historical_loans_and_reservations(client):
     readers,ids,rid=seed(2)
     item=client.get(f'/api/records/{rid}/copies').json()['items'][0]
     loan=issue(client,readers[0],[ids[0]]).json()['loans'][0]
@@ -109,9 +119,11 @@ def test_delete_blocks_loans_and_reservations_then_preserves_closed_loan(client)
     assert close(client,loan['id']).status_code==200
     # Refresh after circulation changes; the closed loan must not be removed.
     item=client.get(f'/api/records/{rid}/copies').json()['items'][0]
-    response=delete(client,item);assert response.status_code==200,response.text
+    response=delete(client,item);assert response.status_code==409,response.text
+    assert 'история' in response.json()['detail']
+    assert not item['can_delete'] and item['can_edit']
     assert client.get(f"/api/circulation/loans/{loan['id']}").status_code==200
-    assert issue(client,readers[1],[ids[0]],override=True,reason='Не разрешает удалённый экземпляр').status_code==409
+    assert issue(client,readers[0],[ids[0]]).status_code==200
     reservation=client.post('/api/circulation/reservations',json={
         'request_key':str(uuid4()),'reader_id':readers[1],'record_id':rid})
     assert reservation.status_code==200,reservation.text
@@ -133,3 +145,91 @@ def test_delete_requires_copy_rights_and_csrf(client):
         assert delete(c,item).status_code==403
         c.headers['X-CSRF-Token']=csrf
         assert delete(c,item).status_code==200
+
+
+def test_delete_frees_both_identifiers_in_another_record_and_keeps_retries_safe(client):
+    from test_catalog import payload
+    from test_existing_copies import body as existing_body
+    r=book(client)
+    creation=existing_body(inventory_number='000123',barcode='000987')
+    item=client.post(f"/api/records/{r['id']}/copies",json=creation).json()
+    # Generate circulation detail and an edit audit before removing the copy.
+    client.get(f"/api/records/{r['id']}/copies")
+    item=edit(client,item,note='Ошибочно добавлен в эту карточку')
+    body={'version':item['version'],'request_key':str(uuid4())}
+    response=delete(client,item,body)
+    assert response.status_code==200,response.text
+    other=client.post('/api/records',json=payload(r['type_id'])).json()
+    replacement=client.post(f"/api/records/{other['id']}/copies",json={**creation,'request_key':str(uuid4())})
+    assert replacement.status_code==201,replacement.text
+    new=replacement.json()
+    assert new['id']!=item['id'] and new['inventory_number']=='000123' and new['barcode']=='000987'
+    assert delete(client,item,body).json()==response.json()
+    assert client.get(f"/api/records/{other['id']}/copies").json()['active']==1
+    assert len(client.get(f"/api/copies/{item['id']}/history").json())==2
+    # A delayed create or edit request cannot resurrect the deleted copy.
+    retry=client.post(f"/api/records/{r['id']}/copies",json=creation)
+    assert retry.status_code==409 and 'уже удалён' in retry.json()['detail']
+    assert delete(client,new,body).status_code==409
+    with session() as s:
+        from app.circulation_models import CopyCirculation
+        assert s.get(CopyCirculation,item['id']) is None
+        assert s.get(Copy,new['id']) is not None
+
+
+def test_deleted_import_is_not_recreated_but_numbers_can_be_reused(client):
+    from test_marcsql_copies import setup, post, row
+    from test_existing_copies import body as existing_body
+    rid=setup(client); raw=row()
+    post(client,[raw])
+    item=client.get(f'/api/records/{rid}/copies').json()['items'][0]
+    assert delete(client,item).status_code==200
+    result=post(client,[raw])[0]
+    assert result['status']=='error' and 'удалён' in result['error']
+    result=client.post(f'/api/records/{rid}/copies',json=existing_body(
+        inventory_number=item['inventory_number'],barcode=item['barcode']))
+    assert result.status_code==201,result.text
+    assert post(client,[raw])[0]['status']=='error'
+    assert client.get(f'/api/records/{rid}/copies').json()['total']==1
+
+
+@pytest.mark.parametrize('origin',['soft_delete','receipt_cancel','receipt_correction'])
+def test_purge_previously_cancelled_copy_does_not_subtract_receipt_twice(client,origin):
+    from app.acquisitions import copy_output, digest
+    from app.db import AcquisitionLine,Acquisition
+    from fastapi.encoders import jsonable_encoder
+    r=book(client)
+    receipt=client.post('/api/acquisitions',json=add_body(r['id'],2,'100')).json()
+    url=f"/api/acquisitions/{receipt['id']}"
+    item=client.get(f"/api/records/{r['id']}/copies").json()['items'][0]
+    legacy_body={'version':item['version'],'request_key':str(uuid4())}
+    if origin=='receipt_cancel':
+        assert client.post(url+'/cancel',json={'version':1,'request_key':str(uuid4()),'reason':'Ошибка'}).status_code==200
+    elif origin=='receipt_correction':
+        p=correction(client,receipt)
+        p['lines'][0].update(quantity=1,cancel_copy_ids=[item['id']])
+        assert client.put(url,json=p).status_code==200
+    else:
+        # Precisely emulate the already deployed soft-delete behavior.
+        with session() as s:
+            c=s.get(Copy,item['id']);line=s.get(AcquisitionLine,c.line_id)
+            acq=s.get(Acquisition,line.acquisition_id)
+            before=jsonable_encoder(copy_output(c,line,acq))
+            c.status='cancelled';c.version+=1;line.quantity-=1;acq.version+=1
+            after={**jsonable_encoder(copy_output(c,line,acq)),'action':'delete',
+                'delete_request_key':legacy_body['request_key'],
+                'payload_hash':digest({'id':c.id,**legacy_body}),'actor_id':1}
+            s.add(CopyHistory(copy_id=c.id,before=before,after=after));s.commit()
+        assert delete(client,item,legacy_body).json()['status']=='cancelled'
+    before_receipt=client.get(url).json()
+    before_report=report(client)
+    item=client.get(f"/api/records/{r['id']}/copies").json()['items'][0]
+    assert not item['can_edit'] and item['can_delete']
+    response=delete(client,item)
+    assert response.status_code==200,response.text
+    after_receipt=client.get(url).json()
+    assert after_receipt.pop('copies')==[c for c in before_receipt.pop('copies') if c['id']!=item['id']]
+    assert after_receipt==before_receipt
+    assert report(client)==before_report
+    with session() as s:
+        assert s.get(Copy,item['id']) is None

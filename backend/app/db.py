@@ -76,7 +76,7 @@ class AcquisitionLine(Base):
 class Copy(Base):
     __tablename__='copies'
     status: Mapped[str]=mapped_column(String(20),default='active',server_default='active')
-    __table_args__=(CheckConstraint('(line_id IS NOT NULL AND record_id IS NULL) OR (line_id IS NULL AND record_id IS NOT NULL AND request_key IS NOT NULL AND payload_hash IS NOT NULL)',name='ck_copy_origin'),CheckConstraint("length(trim(barcode))>0",name='ck_copy_barcode_nonempty'),CheckConstraint('unit_price IS NULL OR unit_price >= 0',name='ck_copy_price'),)
+    __table_args__=(CheckConstraint('(line_id IS NOT NULL AND record_id IS NULL) OR (line_id IS NULL AND record_id IS NOT NULL AND request_key IS NOT NULL AND payload_hash IS NOT NULL)',name='ck_copy_origin'),CheckConstraint("length(trim(barcode))>0",name='ck_copy_barcode_nonempty'),CheckConstraint('unit_price IS NULL OR unit_price >= 0',name='ck_copy_price'),{'sqlite_autoincrement':True})
     id: Mapped[int]=mapped_column(primary_key=True)
     ksu_entry_id: Mapped[int|None]=mapped_column(ForeignKey('ksu_entries.id',ondelete='RESTRICT'),index=True,nullable=True)
     invoice: Mapped[str]=mapped_column(String(255),default='',server_default='')
@@ -102,6 +102,17 @@ class CopyHistory(Base):
     created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),default=utcnow)
     before: Mapped[dict]=mapped_column(JSON().with_variant(JSONB,'postgresql'))
     after: Mapped[dict]=mapped_column(JSON().with_variant(JSONB,'postgresql'))
+
+class CopyDeletion(Base):
+    """Audit and retry receipt, independent of stock and its unique identifiers."""
+    __tablename__='copy_deletions'
+    copy_id: Mapped[int]=mapped_column(primary_key=True,autoincrement=False)
+    request_key: Mapped[str]=mapped_column(String(36),unique=True)
+    payload_hash: Mapped[str]=mapped_column(String(64))
+    creation_request_key: Mapped[str|None]=mapped_column(String(36),unique=True,nullable=True)
+    created_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),default=utcnow)
+    snapshot: Mapped[dict]=mapped_column(JSON().with_variant(JSONB,'postgresql'))
+    result: Mapped[dict]=mapped_column(JSON().with_variant(JSONB,'postgresql'))
 
 class RecordCreation(Base):
     __tablename__='record_creations'

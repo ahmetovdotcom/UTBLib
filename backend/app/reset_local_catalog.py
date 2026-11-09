@@ -2,9 +2,9 @@
 import argparse
 from sqlalchemy import text,delete,select,func
 from .db import (Session,Record,Copy,Acquisition,AcquisitionLine,AcquisitionHistory,Withdrawal,
-    CopyHistory,RecordCreation,MarcsqlSource,MarcsqlCopySource)
+    CopyHistory,CopyDeletion,RecordCreation,MarcsqlSource,MarcsqlCopySource)
 
-TABLES=[Withdrawal,AcquisitionHistory,CopyHistory,MarcsqlCopySource,Copy,AcquisitionLine,Acquisition,RecordCreation,MarcsqlSource,Record]
+TABLES=[CopyDeletion,Withdrawal,AcquisitionHistory,CopyHistory,MarcsqlCopySource,Copy,AcquisitionLine,Acquisition,RecordCreation,MarcsqlSource,Record]
 
 def clear(s):
     if s.bind.dialect.name=='postgresql':
