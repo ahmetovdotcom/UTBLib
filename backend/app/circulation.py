@@ -1,4 +1,5 @@
 from datetime import date,timedelta
+from typing import Literal
 from fastapi import APIRouter,Depends,Query,HTTPException,Request
 from sqlalchemy import select,func,or_
 from .db import User,Record,Copy,Withdrawal
@@ -35,13 +36,17 @@ def make_router(auth,db):
         return {'policy':svc.policy(s).model_dump(mode='json'),'branches':[b for b in branches if b['active']],
                 'history_branches':branches,'timezone':'Asia/Almaty'}
     @router.get('/dashboard')
-    def dashboard(s=Depends(db)):
-        a,b=local_bounds(svc.today())
-        return {'open':s.scalar(select(func.count()).select_from(Loan).where(Loan.closed_at.is_(None))),
-         'overdue':s.scalar(select(func.count()).select_from(Loan).where(Loan.closed_at.is_(None),Loan.due_at<svc.utcnow())),
-         'issued_week':s.scalar(select(func.count()).select_from(Loan).where(Loan.issued_at>=local_bounds(svc.today()-timedelta(days=6))[0],Loan.issued_at<b)),
-         'issued_today':s.scalar(select(func.count()).select_from(Loan).where(Loan.issued_at>=a,Loan.issued_at<b)),
-         'returned_today':s.scalar(select(func.count()).select_from(Loan).where(Loan.returned_at>=a,Loan.returned_at<b)),'date':svc.today()}
+    def dashboard(s=Depends(db),user=Depends(auth)):
+        day=svc.today();week_from=day-timedelta(days=6);a,b=local_bounds(day)
+        own=has(user,'circulation.view_own_history') and not has(user,'circulation.view_any_history')
+        stmt=select(func.count()).select_from(Loan)
+        if own:stmt=stmt.where(Loan.issued_by==user.id)
+        return {'open':s.scalar(stmt.where(Loan.closed_at.is_(None))),
+         'overdue':s.scalar(stmt.where(Loan.closed_at.is_(None),Loan.due_at<svc.utcnow())),
+         'issued_week':s.scalar(stmt.where(Loan.issued_at>=local_bounds(week_from)[0],Loan.issued_at<b)),
+         'issued_today':s.scalar(stmt.where(Loan.issued_at>=a,Loan.issued_at<b)),
+         'returned_today':s.scalar(stmt.where(Loan.returned_at>=a,Loan.returned_at<b)),
+         'date':day,'week_from':week_from,'scope':'own' if own else 'all'}
     @router.get('/readers')
     def find_readers(q:str=Query(min_length=1,max_length=150),s=Depends(db),user=Depends(auth)):
         rate_limit(s,user.id,'circulation-lookup',180);value=q.strip();pattern='%'+value.replace('%','\\%').replace('_','\\_')+'%'
@@ -96,21 +101,24 @@ def make_router(auth,db):
     def renew_own(id:int,body:RenewInput,s=Depends(db),user=Depends(auth)):return svc.operation(s,user,'own-renew:'+str(id),body,lambda:svc.renew(s,user,id,body,True))
     @router.get('/loans')
     @router.get('/mine')
-    def history(q:str='',status:str='',reader_id:int|None=None,branch_id:int|None=None,from_on:date|None=None,to_on:date|None=None,offset:int=Query(0,ge=0),s=Depends(db),user=Depends(auth),request:Request=None):
+    def history(q:str='',status:str='',reader_id:int|None=None,branch_id:int|None=None,from_on:date|None=None,to_on:date|None=None,date_field:Literal['issued','returned']='issued',offset:int=Query(0,ge=0),s=Depends(db),user=Depends(auth),request:Request=None):
         mine=request.url.path.endswith('/mine');stmt=select(Loan).join(Reader,Reader.id==Loan.reader_id).join(Copy,Copy.id==Loan.copy_id)
         if mine:stmt=stmt.where(Reader.user_id==user.id)
         elif not has(user,'circulation.view_any_history'):
             require(user,'circulation.view_own_history');stmt=stmt.where(Loan.issued_by==user.id)
         if reader_id:stmt=stmt.where(Loan.reader_id==reader_id)
         if branch_id:stmt=stmt.where(Loan.branch_id==branch_id)
-        if status=='overdue':stmt=stmt.where(Loan.closed_at.is_(None),Loan.due_at<svc.utcnow())
+        if status=='open':stmt=stmt.where(Loan.closed_at.is_(None))
+        elif status=='overdue':stmt=stmt.where(Loan.closed_at.is_(None),Loan.due_at<svc.utcnow())
         elif status=='active':stmt=stmt.where(Loan.closed_at.is_(None),Loan.due_at>=svc.utcnow())
         elif status:stmt=stmt.where(Loan.status==status)
-        if from_on:stmt=stmt.where(Loan.issued_at>=local_bounds(from_on)[0])
-        if to_on:stmt=stmt.where(Loan.issued_at<local_bounds(to_on)[1])
+        if from_on and to_on and from_on>to_on:svc.fail('Дата начала периода позже даты окончания',422)
+        period_field=Loan.returned_at if date_field=='returned' else Loan.issued_at
+        if from_on:stmt=stmt.where(period_field>=local_bounds(from_on)[0])
+        if to_on:stmt=stmt.where(period_field<local_bounds(to_on)[1])
         if q:stmt=stmt.where(or_(Reader.full_name.ilike('%'+q+'%'),Reader.ticket_number==q,Copy.inventory_number==q,Copy.barcode==q))
         total=s.scalar(select(func.count()).select_from(stmt.subquery()))
-        return {'total':total,'items':[svc.loan_output(s,l) for l in s.scalars(stmt.order_by(Loan.id.desc()).offset(offset).limit(50))]}
+        return {'total':total,'items':[svc.loan_output(s,l) for l in s.scalars(stmt.order_by(period_field.desc(),Loan.id.desc()).offset(offset).limit(50))]}
     @router.get('/loans/{id}')
     def loan_detail(id:int,s=Depends(db),user=Depends(auth)):
         l=s.get(Loan,id)
