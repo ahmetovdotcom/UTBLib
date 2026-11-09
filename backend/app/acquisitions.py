@@ -81,6 +81,11 @@ class ExistingCopyInput(Strict):
     def past_check(cls,v): return CopyInput.past_check(v)
 
 
+class CopyDeleteInput(Strict):
+    request_key: UUID
+    version: int=Field(ge=1)
+
+
 def digest(body):
     return hashlib.sha256(json.dumps(body,sort_keys=True,ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
 
@@ -322,6 +327,58 @@ def make_router(auth,db):
         except IntegrityError:
             s.rollback();raise HTTPException(409,'Инвентарный номер или штрихкод уже используется')
         return copy_output(c,line,receipt)
+
+    @router.delete('/copies/{id}')
+    def delete_copy(id:int,body:CopyDeleteInput,s=Depends(db),user=Depends(auth)):
+        from .db import AcquisitionHistory
+        from .stock_operations import receipt_snapshot
+        from .circulation_service import active_loan,active_reservation
+        key=str(body.request_key)
+        hashed=digest({'id':id,**body.model_dump(mode='json')})
+        lock_request(s,'copy-delete:',key)
+        previous=s.scalar(select(CopyHistory).where(CopyHistory.copy_id==id,
+            CopyHistory.after['delete_request_key'].as_string()==key))
+        if previous:
+            if previous.after['payload_hash']!=hashed:
+                raise HTTPException(409,'Эта операция удаления уже выполнена с другими данными. Обновите список.')
+            return previous.after
+
+        # Keep the same receipt -> copy lock order as copy editing and stock operations.
+        existing=s.get(Copy,id)
+        if existing and existing.line_id:
+            origin=s.get(AcquisitionLine,existing.line_id)
+            s.scalar(select(Acquisition).where(Acquisition.id==origin.acquisition_id).with_for_update())
+        c=s.scalar(select(Copy).where(Copy.id==id).with_for_update().execution_options(populate_existing=True))
+        if c is None: raise HTTPException(404,'Экземпляр не найден')
+        if active_loan(s,id) or active_reservation(s,id):
+            raise HTTPException(409,'Экземпляр выдан или забронирован. Сначала оформите возврат или завершите бронь.')
+        if c.version!=body.version or c.status!='active':
+            raise HTTPException(409,'Экземпляр изменён, списан или уже удалён. Обновите список.')
+        line=s.get(AcquisitionLine,c.line_id) if c.line_id else None
+        receipt=s.get(Acquisition,line.acquisition_id) if line else None
+        if receipt and (receipt.status!='posted' or line.quantity<1):
+            raise HTTPException(409,'Поступление изменено или отменено. Обновите список.')
+        before=jsonable_encoder(copy_output(c,line,receipt))
+        receipt_before=receipt_snapshot(s,receipt) if receipt else None
+        # Retain identifiers, MARCSQL provenance and closed loan history. Cancelled
+        # copies are excluded from the live fund and KSU reports already.
+        c.status='cancelled';c.version+=1
+        if receipt:
+            line.quantity-=1
+            receipt.version+=1
+            s.flush()
+            if not s.scalar(select(func.sum(AcquisitionLine.quantity)).where(AcquisitionLine.acquisition_id==receipt.id)):
+                receipt.status='cancelled'
+        s.flush()
+        after={**jsonable_encoder(copy_output(c,line,receipt)),'action':'delete',
+            'delete_request_key':key,'payload_hash':hashed,'actor_id':user.id}
+        s.add(CopyHistory(copy_id=id,before=before,after=after))
+        if receipt:
+            s.add(AcquisitionHistory(acquisition_id=receipt.id,request_key=str(uuid4()),
+                payload_hash=hashed,action='copy_delete',reason=f'Удаление экземпляра {c.inventory_number} (№{id})',
+                before=receipt_before,after=receipt_snapshot(s,receipt)))
+        s.commit()
+        return after
 
     @router.get('/copies/{id}/history')
     def history(id:int,s=Depends(db)):
