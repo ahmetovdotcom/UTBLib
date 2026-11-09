@@ -8,9 +8,9 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from sqlalchemy import select, func, text
+from sqlalchemy import select, func, text, delete, update
 from sqlalchemy.exc import IntegrityError
-from .db import Acquisition, AcquisitionLine, Copy, CopyHistory, Record, KsuEntry
+from .db import Acquisition, AcquisitionLine, Copy, CopyHistory, CopyDeletion, Record, KsuEntry
 
 class Strict(BaseModel):
     model_config=ConfigDict(extra='forbid',str_strip_whitespace=True)
@@ -179,6 +179,14 @@ def copy_output(c,line=None,receipt=None):
         'received_on':c.received_on,'source':c.source,'invoice':c.invoice or None,
         'ksu_entry_id':c.ksu_entry_id}
 
+def protected_copy_ids(s,ids):
+    # Accounting history must not be cascaded away when correcting imported stock.
+    from .db import Withdrawal
+    from .circulation_models import Loan,Reservation,Incident,Fine
+    columns=(Loan.copy_id,Reservation.assigned_copy_id,Incident.copy_id,Fine.copy_id,Withdrawal.copy_id)
+    queries=[select(column).where(column.in_(ids)) for column in columns]
+    return set(s.scalars(queries[0].union(*queries[1:]))) if ids else set()
+
 def make_router(auth,db):
     router=APIRouter(prefix='/api',dependencies=[Depends(auth)])
     @router.post('/acquisitions')
@@ -226,6 +234,8 @@ def make_router(auth,db):
     def create_existing_copy(id:int,body:ExistingCopyInput,s=Depends(db)):
         key=str(body.request_key);hashed=digest({'record_id':id,**body.model_dump(mode='json',exclude={k for k in ('invoice','ksu_entry_id') if k not in body.model_fields_set})})
         lock_request(s,'existing-copy:',key)
+        if s.scalar(select(CopyDeletion.copy_id).where(CopyDeletion.creation_request_key==key)) is not None:
+            raise HTTPException(409,'Экземпляр из этой операции уже удалён. Для повторного добавления откройте новую форму создания.')
         old=s.scalar(select(Copy).where(Copy.request_key==key))
         if old:
             if old.payload_hash!=hashed: raise HTTPException(409,'Эта операция уже выполнена с другими данными')
@@ -259,6 +269,7 @@ def make_router(auth,db):
         from .security import has
         rows=list(s.execute(stmt.order_by(Copy.id).offset(offset).limit(limit)))
         ids=[row[0].id for row in rows]
+        protected=protected_copy_ids(s,ids)
         loans={l.copy_id:l for l in s.scalars(select(Loan).where(Loan.copy_id.in_(ids),Loan.closed_at.is_(None)))}
         reservations={r.assigned_copy_id:r for r in s.scalars(select(Reservation).where(Reservation.assigned_copy_id.in_(ids),Reservation.status.in_(ACTIVE_RESERVATIONS)))}
         details={d.copy_id:d for d in s.scalars(select(CopyCirculation).where(CopyCirculation.copy_id.in_(ids)))}
@@ -270,6 +281,10 @@ def make_router(auth,db):
             loan=loans.get(c.id);reservation=reservations.get(c.id)
             state=copy_availability(c,details.get(c.id) or detail(s,c),loan,reservation)
             item={**copy_output(c,line,receipt),'ksu_number':ksu_labels.get(c.ksu_entry_id),'availability':state,'can_edit':c.status=='active' and not loan and not reservation,'loan':None}
+            reason=('Экземпляр выдан или забронирован.' if loan or reservation else
+                    'Есть история выдач, бронирований или списания. Полное удаление недоступно.' if c.id in protected else
+                    'Экземпляр списан или недоступен для удаления.' if c.status not in ('active','cancelled') else '')
+            item.update(can_delete=not reason,delete_block_reason=reason)
             if loan and can_view:
                 borrower=readers[loan.reader_id]
                 item['loan']={'id':loan.id,'reader_id':borrower.id,'reader_name':borrower.full_name,'ticket_number':borrower.ticket_number,'issued_at':loan.issued_at,'due_at':loan.due_at}
@@ -330,12 +345,19 @@ def make_router(auth,db):
 
     @router.delete('/copies/{id}')
     def delete_copy(id:int,body:CopyDeleteInput,s=Depends(db),user=Depends(auth)):
-        from .db import AcquisitionHistory
+        from .db import AcquisitionHistory,MarcsqlCopySource
         from .stock_operations import receipt_snapshot
         from .circulation_service import active_loan,active_reservation
+        from .circulation_models import CopyCirculation
         key=str(body.request_key)
         hashed=digest({'id':id,**body.model_dump(mode='json')})
         lock_request(s,'copy-delete:',key)
+        deleted=s.scalar(select(CopyDeletion).where(CopyDeletion.request_key==key))
+        if deleted:
+            if deleted.payload_hash!=hashed:
+                raise HTTPException(409,'Эта операция удаления уже выполнена с другими данными. Обновите список.')
+            return deleted.result
+        # A retry from the previous soft-delete UI must not turn into a hard delete.
         previous=s.scalar(select(CopyHistory).where(CopyHistory.copy_id==id,
             CopyHistory.after['delete_request_key'].as_string()==key))
         if previous:
@@ -352,28 +374,40 @@ def make_router(auth,db):
         if c is None: raise HTTPException(404,'Экземпляр не найден')
         if active_loan(s,id) or active_reservation(s,id):
             raise HTTPException(409,'Экземпляр выдан или забронирован. Сначала оформите возврат или завершите бронь.')
-        if c.version!=body.version or c.status!='active':
+        if c.version!=body.version or c.status not in ('active','cancelled'):
             raise HTTPException(409,'Экземпляр изменён, списан или уже удалён. Обновите список.')
+        if protected_copy_ids(s,[id]):
+            raise HTTPException(409,'Есть история выдач, бронирований или списания. Полное удаление недоступно: связанные учётные операции должны сохраниться.')
         line=s.get(AcquisitionLine,c.line_id) if c.line_id else None
         receipt=s.get(Acquisition,line.acquisition_id) if line else None
-        if receipt and (receipt.status!='posted' or line.quantity<1):
+        affects_receipt=receipt is not None and c.status=='active'
+        if affects_receipt and (receipt.status!='posted' or line.quantity<1):
             raise HTTPException(409,'Поступление изменено или отменено. Обновите список.')
         before=jsonable_encoder(copy_output(c,line,receipt))
-        receipt_before=receipt_snapshot(s,receipt) if receipt else None
-        # Retain identifiers, MARCSQL provenance and closed loan history. Cancelled
-        # copies are excluded from the live fund and KSU reports already.
-        c.status='cancelled';c.version+=1
-        if receipt:
+        receipt_before=receipt_snapshot(s,receipt) if affects_receipt else None
+        audit=[{'created_at':h.created_at,'before':h.before,'after':h.after} for h in
+            s.scalars(select(CopyHistory).where(CopyHistory.copy_id==id).order_by(CopyHistory.id))]
+        state=s.get(CopyCirculation,id)
+        snapshot=jsonable_encoder({'copy':before,'history':audit,
+            'circulation':{column.name:getattr(state,column.name) for column in CopyCirculation.__table__.columns} if state else None})
+        after={**before,'status':'deleted','version':c.version+1,'action':'delete_permanently',
+            'delete_request_key':key,'payload_hash':hashed,'actor_id':user.id}
+        s.add(CopyDeletion(copy_id=id,request_key=key,payload_hash=hashed,
+            creation_request_key=c.request_key,snapshot=snapshot,result=after))
+        # Keep source tombstones to prevent a later MARCSQL import from recreating
+        # the wrongly assigned copy. Neither tombstones nor audit reserve numbers.
+        s.execute(update(MarcsqlCopySource).where(MarcsqlCopySource.copy_id==id).values(copy_id=None))
+        s.execute(delete(CopyHistory).where(CopyHistory.copy_id==id))
+        s.execute(delete(CopyCirculation).where(CopyCirculation.copy_id==id))
+        s.delete(c)
+        if affects_receipt:
             line.quantity-=1
             receipt.version+=1
             s.flush()
             if not s.scalar(select(func.sum(AcquisitionLine.quantity)).where(AcquisitionLine.acquisition_id==receipt.id)):
                 receipt.status='cancelled'
         s.flush()
-        after={**jsonable_encoder(copy_output(c,line,receipt)),'action':'delete',
-            'delete_request_key':key,'payload_hash':hashed,'actor_id':user.id}
-        s.add(CopyHistory(copy_id=id,before=before,after=after))
-        if receipt:
+        if affects_receipt:
             s.add(AcquisitionHistory(acquisition_id=receipt.id,request_key=str(uuid4()),
                 payload_hash=hashed,action='copy_delete',reason=f'Удаление экземпляра {c.inventory_number} (№{id})',
                 before=receipt_before,after=receipt_snapshot(s,receipt)))
@@ -382,6 +416,10 @@ def make_router(auth,db):
 
     @router.get('/copies/{id}/history')
     def history(id:int,s=Depends(db)):
-        if s.get(Copy,id) is None: raise HTTPException(404,'Экземпляр не найден')
+        if s.get(Copy,id) is None:
+            deleted=s.get(CopyDeletion,id)
+            if deleted:
+                return deleted.snapshot['history']+[{'created_at':deleted.created_at,'before':deleted.snapshot['copy'],'after':deleted.result}]
+            raise HTTPException(404,'Экземпляр не найден')
         return [{'created_at':h.created_at,'before':h.before,'after':h.after} for h in s.scalars(select(CopyHistory).where(CopyHistory.copy_id==id).order_by(CopyHistory.id))]
     return router
