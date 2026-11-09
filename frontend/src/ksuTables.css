@@ -1,0 +1,22 @@
+/* Shared grid for KSU reports, copy lists and literature-code mappings. */
+.app-shell table.ksu-grid {
+  border-collapse: collapse;
+  border: 1px solid #9aabbf;
+}
+
+.app-shell .ksu-grid :is(th, td) {
+  border: 1px solid #9aabbf;
+}
+
+.app-shell .ksu-grid thead th {
+  border-color: #8295ac;
+}
+
+.app-shell .ksu-grid thead tr:last-child th,
+.app-shell .ksu-grid thead th[rowspan] {
+  border-bottom: 2px solid #8295ac;
+}
+
+.app-shell .ksu-grid tfoot :is(th, td) {
+  border-top: 2px solid #8295ac;
+}
