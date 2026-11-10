@@ -40,8 +40,8 @@ def test_missing_multiple_specialties_and_unknown_price(client):
     t=make_type(client)
     for specs in [[],['Экономика','Туризм'],['Туризм','Туризм']]:add(client,book(client,t,specs),2,'5')
     d=client.get(URL).json()
-    assert set(d['totals'])=={'missing','multiple','specialty:Туризм'}
-    assert {c['label'] for c in d['columns']}=={'Не указана специальность','Несколько специальностей — не распределено','Туризм'}
+    assert set(d['totals'])=={'missing','specialty:Туризм'}
+    assert {c['label'] for c in d['columns']}=={'Основная специальность не выбрана','Туризм'}
     assert d['total']['copies']==sum(b['copies'] for b in d['totals'].values())==6
     assert d['total']['amount']=='30.00' and d['issue_count']==2
     # Explicitly unallocated columns may be exported, with explanations.

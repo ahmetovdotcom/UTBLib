@@ -141,6 +141,11 @@ def make_router(auth,db):
             s.rollback();raise HTTPException(409,'КСУ с таким номером и годом уже существует')
         return entry_output(e)
 
+    @router.get('/entries/{id}/specialties')
+    def get_allocations(id:int,s=Depends(db)):
+        from .specialties import entry_allocations
+        return entry_allocations(s,id)
+
     @router.get('/entries/{id}/copies')
     def entry_copies(id:int,offset:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100),s=Depends(db)):
         e=s.get(KsuEntry,id)

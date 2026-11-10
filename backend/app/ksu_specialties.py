@@ -3,7 +3,8 @@ from datetime import date
 from decimal import Decimal
 from io import BytesIO
 from sqlalchemy import select
-from .db import Acquisition, AcquisitionLine, Record, KsuEntry
+from .db import KsuEntry
+from .specialties import primary
 from .ksu_auto import vals
 
 
@@ -18,14 +19,12 @@ def report(s, date_from, date_to):
     for e in entries:
         groups={};total=bucket();issues=[]
         for line,record in lines.get(e.id,[]):
-            specialties=sorted(vals(record.marc,'952','j'));messages=[]
-            if len(specialties)==1:
-                key='specialty:'+specialties[0];label=specialties[0]
-            elif not specialties:
-                key='missing';label='Не указана специальность';messages.append('Заполните 952$j «Специальность» в карточке книги.')
+            selected=primary(record.marc,record.primary_specialty);messages=[]
+            if selected:
+                key='specialty:'+selected;label=selected
             else:
-                key='multiple';label='Несколько специальностей — не распределено'
-                messages.append('Указано несколько специальностей: '+ '; '.join(specialties)+'. Экземпляры и сумма учтены один раз в отдельной колонке, без распределения.')
+                key='missing';label='Основная специальность не выбрана'
+                messages.append('Выберите основную специальность в карточке книги из значений 952$j «Специальность» и сохраните запись. КСУ пересчитается автоматически. Экземпляры и сумма учтены один раз.')
             columns[key]=label
             known=line.unit_price is not None and line.currency=='KZT'
             if not known:messages.append('Не указана цена в тенге: исправьте экземпляры.')
@@ -88,8 +87,8 @@ def export_xlsx(data):
     ws.freeze_panes='E4';ws.print_title_rows='1:3';ws.page_setup.orientation='landscape'
     ws.print_area=f'A1:{get_column_letter(width)}{last}'
     notes=w.create_sheet('Пояснения')
-    for text in ['Специальности — полные значения 952$j из текущих карточек каталога.',
-        'Каждый экземпляр и его стоимость учитываются один раз. Несколько специальностей не распределяются автоматически.',
+    for text in ['Основная специальность берётся из текущей карточки каталога. После её изменения и сохранения все связанные КСУ пересчитываются автоматически.',
+        'Каждое наименование, экземпляр и его стоимость учитываются один раз по основной специальности. Дополнительные специальности не увеличивают итог. При отсутствии выбора — отдельная колонка.',
         'Наименования считаются отдельно в каждой партии. Общий итог — сумма по партиям, не уникальные названия фонда.',
         'Отменённые поступления и экземпляры без КСУ исключены. Списания не уменьшают исторические поступления.',
         'Период определяется по дате регистрации КСУ включительно. Суммы в тенге, без доставки.']:

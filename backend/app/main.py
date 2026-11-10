@@ -61,6 +61,7 @@ from uuid import UUID
 from .acquisitions import InitialAcquisition, initial_body, register, digest, lock_request, make_router
 
 class RecordInput(Strict):
+    primary_specialty: str|None=None
     request_key: UUID|None=None
     initial_acquisition: InitialAcquisition|None=None
     type_id: int
@@ -105,7 +106,9 @@ def save_type(body,s,id=None):
 def create_type(body:TypeInput,s=Depends(db)): return save_type(body,s)
 @app.put('/api/types/{id}',dependencies=[Depends(auth)])
 def edit_type(id:int,body:TypeInput,s=Depends(db)): return save_type(body,s,id)
-def output(r): return {'id':r.id,'type_id':r.type_id,'version':r.version,'marc':r.marc}
+def output(r):
+    from .specialties import primary
+    return {'primary_specialty':primary(r.marc,r.primary_specialty),'id':r.id,'type_id':r.type_id,'version':r.version,'marc':r.marc}
 @app.get('/api/records',dependencies=[Depends(auth)])
 def records(q:str='',udc:str=Query('',max_length=150),type_id:int|None=None,offset:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100),conditions:str=Query('',max_length=8000),match:Literal['all','any']='all',s=Depends(db)):
     stmt=select(Record)
@@ -152,7 +155,7 @@ def record(id:int,s=Depends(db)):
 def save_record(body,s,id=None,user=None):
     if id and (body.initial_acquisition or body.request_key):
         raise HTTPException(422,'Для новых экземпляров используйте «Добавить экземпляры»')
-    request_hash=digest(body.model_dump(mode='json'))
+    request_hash=digest(body.model_dump(mode='json',exclude={'primary_specialty'} if 'primary_specialty' not in body.model_fields_set else set()))
     if not id and body.request_key:
         lock_request(s,'record:',body.request_key)
         prior=s.get(RecordCreation,str(body.request_key))
@@ -171,8 +174,13 @@ def save_record(body,s,id=None,user=None):
     previous_marc=previous.marc if previous else None
     previous_type=previous.type_id if previous else None
     marc=populate(marc,t.config,t.name,previous_marc)
+    from .specialties import primary, choices
+    selected=body.primary_specialty if 'primary_specialty' in body.model_fields_set else (previous.primary_specialty if previous else None)
+    if 'primary_specialty' in body.model_fields_set and selected and selected.strip() and selected.strip() not in choices(marc):
+        raise HTTPException(422,'Основная специальность должна входить в поле «Специальность» (952$j)')
+    selected=primary(marc,selected)
     from .statistics import comparable, record_activity
-    meaningful=creating or previous_type!=t.id or comparable(marc)!=comparable(previous_marc)
+    meaningful=creating or previous_type!=t.id or comparable(marc)!=comparable(previous_marc) or selected!=primary(previous_marc,previous.primary_specialty)
     if not creating and meaningful and user is not None and (any(c['tag']=='097' for c in t.config) or any(f['tag']=='097' for f in marc['fields'])):
         from .catalog_vocabularies import set_operator
         set_operator(marc,user.display_name)
@@ -182,10 +190,10 @@ def save_record(body,s,id=None,user=None):
     if errors: raise HTTPException(422,errors)
     if id:
         if body.version is None: raise HTTPException(422,'Version required')
-        changed=s.execute(update(Record).where(Record.id==id,Record.version==body.version).values(type_id=t.id,marc=marc,search_text=search_text(marc),version=body.version+1))
+        changed=s.execute(update(Record).where(Record.id==id,Record.version==body.version).values(type_id=t.id,marc=marc,search_text=search_text(marc),primary_specialty=selected,version=body.version+1))
         if changed.rowcount!=1: raise HTTPException(409,'Record changed or deleted; reload before saving')
     else:
-        r=Record(type_id=t.id,marc=marc,search_text=search_text(marc)); s.add(r); s.flush(); id=r.id
+        r=Record(type_id=t.id,marc=marc,search_text=search_text(marc),primary_specialty=selected); s.add(r); s.flush(); id=r.id
     vocab_errors,vocab_warnings=apply_vocabularies(s,t,marc,previous_marc)
     if vocab_errors:
         s.rollback(); raise HTTPException(422,vocab_errors)

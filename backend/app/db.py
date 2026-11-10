@@ -17,6 +17,7 @@ class Record(Base):
     version: Mapped[int]=mapped_column(Integer,default=1)
     marc: Mapped[dict]=mapped_column(JSON().with_variant(JSONB,'postgresql'))
     search_text: Mapped[str]=mapped_column(Text)
+    primary_specialty: Mapped[str|None]=mapped_column(Text,nullable=True)
 class VocabularyEntry(Base):
     __tablename__='vocabulary_entries'
     __table_args__=(__import__('sqlalchemy').UniqueConstraint('type_id','tag','code','value_key',name='uq_vocabulary_value'),)
@@ -211,6 +212,15 @@ class KsuEntry(Base):
     document_on: Mapped[date|None]=mapped_column(Date,nullable=True)
     version: Mapped[int]=mapped_column(Integer,default=1)
     snapshot: Mapped[dict]=mapped_column(JSON().with_variant(JSONB,'postgresql'))
+
+# Legacy snapshots from migration 0022 are retained; reports use the live catalogue.
+class KsuSpecialtyAllocation(Base):
+    __tablename__='ksu_specialty_allocations'
+    entry_id: Mapped[int]=mapped_column(ForeignKey('ksu_entries.id',ondelete='RESTRICT'),primary_key=True)
+    record_id: Mapped[int]=mapped_column(ForeignKey('records.id',ondelete='CASCADE'),primary_key=True)
+    primary_specialty: Mapped[str|None]=mapped_column(Text,nullable=True)
+    specialties: Mapped[list]=mapped_column(JSON().with_variant(JSONB,'postgresql'))
+    version: Mapped[int]=mapped_column(Integer,default=1)
 
 class KsuHistory(Base):
     __tablename__='ksu_history'
