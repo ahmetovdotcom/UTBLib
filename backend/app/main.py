@@ -181,9 +181,7 @@ def save_record(body,s,id=None,user=None):
     selected=primary(marc,selected)
     from .statistics import comparable, record_activity
     meaningful=creating or previous_type!=t.id or comparable(marc)!=comparable(previous_marc) or selected!=primary(previous_marc,previous.primary_specialty)
-    if not creating and meaningful and user is not None and (any(c['tag']=='097' for c in t.config) or any(f['tag']=='097' for f in marc['fields'])):
-        from .catalog_vocabularies import set_operator
-        set_operator(marc,user.display_name)
+    # 097$b belongs to the description; record_activity records the actual editor.
     effective={**DICTIONARY,**{c['tag']:LOCAL_DICTIONARY[c['tag']] for c in t.config if c.get('local') and c['tag'] in LOCAL_DICTIONARY}}
     errors,warnings=validate_marc(marc,t.config,effective,previous=previous_marc)
     errors+=validate_coded(marc,previous.marc if previous else None)

@@ -33,16 +33,3 @@ def seed_literature(s,t):
 def employee_entries(s):
     return [{'id':-u.id,'tag':'097','code':'b','value':u.display_name,'label':'','managed':True}
             for u in s.scalars(select(User).where(User.active.is_(True),User.deleted.is_(False)).order_by(User.display_name,User.id))]
-
-def set_operator(marc,name):
-    """Replace operator subfields, retaining all unrelated imported subfields."""
-    found=False
-    for field in marc['fields']:
-        if field['tag']!='097': continue
-        for sf in field.get('subfields',[]):
-            if sf['code']=='b': sf['value']=name;found=True
-    if not found:
-        field=next((f for f in marc['fields'] if f['tag']=='097'),None)
-        if field is None:
-            field={'tag':'097','ind1':' ','ind2':' ','subfields':[]};marc['fields'].append(field)
-        field.setdefault('subfields',[]).append({'code':'b','value':name})
