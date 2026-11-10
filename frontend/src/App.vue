@@ -254,7 +254,7 @@ onUnmounted(()=>{window.removeEventListener('click',dismiss);window.removeEventL
 </section>
 <UsersPage v-if="page==='users'&&currentUser.role==='admin'" :api="api" :currentId="currentUser.id" @selfChanged="signedOut" />
 <WithdrawalsPage v-if="page==='withdrawals'&&can('withdrawals.view')" :canCreate="can('withdrawals.create')" :api="api" />
-<CirculationPage :initial-reader-id="issueReaderId" @reader-consumed="issueReaderId=null" v-if="page==='circulation'" :api="api" :can="can" />
+<CirculationPage :initial-reader-id="issueReaderId" @reader-consumed="issueReaderId=null" @reader="openReader" v-if="page==='circulation'" :api="api" :can="can" />
 <ReadersPage v-if="page==='readers'&&can('readers.registry.view')" ref="readersPage" :api="api" :can="can" :is-admin="currentUser.role==='admin'" @visit="openVisit" @issue="openReaderIssue" />
 <SiteContentPage v-if="page==='site'&&can('site.manage')" :api="api" :csrf="csrf" />
 <EventsPage v-if="page==='events'&&can('events.view')" :api="api" :can="can" @reader="openReader" /><VisitsPage v-if="page==='visits'&&(can('visits.record')||can('visits.view'))" :api="api" :can="can" :initial-code="visitCode" @reader="openReader" @report="openAttendance" />
