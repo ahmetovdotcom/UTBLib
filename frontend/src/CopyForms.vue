@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import {computed,onBeforeUnmount,ref,watch} from 'vue';
-import {filterFormCopies,selectedFormCopies,formBook,formDocument,formLayout,loadFormCopies,type FormBook,type PrintCopy} from './copyForms';
+import {DEFAULT_FORM_LAYOUT,filterFormCopies,selectedFormCopies,formBook,formDocument,formLayout,loadFormCopies,type FormBook,type PrintCopy} from './copyForms';
 const props=defineProps<{recordId:number;api:(path:string)=>Promise<any>}>();
 const dialog=ref<HTMLDialogElement|null>(null),frame=ref<HTMLIFrameElement|null>(null);
 const busy=ref(false),error=ref(''),overflow=ref(false),ready=ref(false),copies=ref<PrintCopy[]>([]),book=ref<FormBook|null>(null);
 const selected=ref(new Set<number>()),query=ref('');
 const selectedCopies=computed(()=>selectedFormCopies(copies.value,selected.value));
 const filtered=computed(()=>filterFormCopies(copies.value,query.value));
-const width=ref(40),height=ref(100),columns=ref(3),revision=ref(0);
-const layout=computed(()=>{try{return {value:formLayout(width.value,height.value,columns.value),error:''};}catch(e){return {value:null,error:(e as Error).message};}});
-const documentHtml=computed(()=>book.value&&selectedCopies.value.length&&layout.value.value?formDocument(book.value,selectedCopies.value,width.value,height.value,columns.value):'');
+const width=ref(DEFAULT_FORM_LAYOUT.width),height=ref(DEFAULT_FORM_LAYOUT.height),columns=ref(DEFAULT_FORM_LAYOUT.columns),margin=ref(DEFAULT_FORM_LAYOUT.margin),revision=ref(0);
+const layout=computed(()=>{try{return {value:formLayout(width.value,height.value,columns.value,margin.value),error:''};}catch(e){return {value:null,error:(e as Error).message};}});
+const documentHtml=computed(()=>book.value&&selectedCopies.value.length&&layout.value.value?formDocument(book.value,selectedCopies.value,width.value,height.value,columns.value,margin.value):'');
 watch(documentHtml,()=>{ready.value=false;overflow.value=false;revision.value++;},{flush:'sync'});
 let generation=0;
 function close(){generation++;busy.value=false;dialog.value?.close();}
@@ -37,9 +37,10 @@ function print(){if(ready.value&&!overflow.value&&selectedCopies.value.length&&l
 <h2 id="copy-forms-title">Бланки экземпляров</h2>
 <p>Выберите экземпляры для печати — по одному бланку на каждый выбранный экземпляр. Используются сохранённые данные карточки; списанные и отменённые экземпляры исключены.</p>
 <div class="acquisition-grid">
-<label>Ширина, мм<input v-model.number="width" type="number" min="35" max="190"></label>
-<label>Высота, мм<input v-model.number="height" type="number" min="70" max="277"></label>
+<label>Ширина, мм<input v-model.number="width" type="number" min="35" max="210"></label>
+<label>Высота, мм<input v-model.number="height" type="number" min="70" max="297"></label>
 <label>Столбцов на A4<input v-model.number="columns" type="number" min="1" max="4"></label>
+<label>Поля листа, мм<input v-model.number="margin" type="number" min="0" max="20" step="0.5"></label>
 </div>
 <p v-if="busy" role="status">Загрузка всех экземпляров…</p>
 <p v-if="error||layout.error" class="inline-error" role="alert">{{error||layout.error}}</p>
@@ -55,7 +56,7 @@ function print(){if(ready.value&&!overflow.value&&selectedCopies.value.length&&l
 <p v-if="selectedCopies.length&&layout.value" aria-live="polite">Бланков: {{selectedCopies.length}} · До {{layout.value.perPage}} на листе · Листов: {{Math.ceil(selectedCopies.length/layout.value.perPage)}}.</p>
 <p>Слева вверху — полочный индекс (090$a), а если он отсутствует — УДК (080$a). Под ним — авторский знак (090$x), если он заполнен в карточке. Цена берётся из экземпляра; «—» означает, что она не указана.</p>
 <p v-if="overflow" role="alert" class="inline-error">Текст не помещается в один из бланков. Увеличьте ширину или высоту.</p>
-<p>В окне печати выберите A4, масштаб 100%, отключите колонтитулы браузера.</p>
+<p>В окне печати: A4, масштаб 100%, поля «Нет», колонтитулы выключены. Отступы уже включены в макет. Если принтер обрезает края, увеличьте «Поля листа» выше; 0 мм подходит для печати без полей.</p>
 <div class="modal-actions"><button type="button" @click="close">Закрыть</button><button type="button" class="primary" :disabled="busy||!ready||overflow||!!layout.error||!selectedCopies.length" @click="print">Печатать / сохранить PDF</button></div>
 <iframe v-if="documentHtml" :key="revision" ref="frame" :srcdoc="documentHtml" title="Предпросмотр бланков экземпляров" @load="inspect"></iframe>
 </dialog>

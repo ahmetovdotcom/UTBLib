@@ -1,6 +1,8 @@
 export type PrintCopy = {id:number;inventory_number:string;barcode?:string|null;unit_price:string|number|null;currency:string;status:string};
 type Field = {tag:string;ind2?:string;subfields?:{code:string;value:string}[]};
 export type FormBook = {index:string;authorMark:string;author:string;title:string;year:string};
+export const DEFAULT_FORM_LAYOUT={width:80,height:130,columns:2,margin:3};
+const PAGE_WIDTH=210,PAGE_HEIGHT=297,FORM_GAP=1;
 export function formBook(record:{marc:{fields:Field[]}}):FormBook {
  const fields=record.marc.fields;
  const values=(tag:string,code:string)=>fields.filter(f=>f.tag===tag).flatMap(f=>f.subfields||[]).filter(s=>s.code===code).map(s=>s.value.trim()).filter(Boolean);
@@ -24,23 +26,25 @@ export function selectedFormCopies(copies:PrintCopy[],ids:ReadonlySet<number>):P
 export function filterFormCopies(copies:PrintCopy[],query:string):PrintCopy[]{
  const q=query.trim().toLocaleLowerCase();return copies.filter(c=>(c.inventory_number+' '+(c.barcode||'')).toLocaleLowerCase().includes(q));
 }
-export function formLayout(width:number,height:number,columns:number){
- if(!Number.isFinite(width)||!Number.isFinite(height)||!Number.isInteger(columns)||width<35||height<70||width>190||height>277||columns<1||columns>4)throw new Error('Размер: ширина 35–190 мм, высота 70–277 мм; столбцов от 1 до 4.');
- if(width*columns+5*(columns-1)>190)throw new Error('Бланки не помещаются по ширине A4. Уменьшите ширину или число столбцов.');
- const rows=Math.floor((277+5)/(height+5));return {rows,perPage:rows*columns};
+export function formLayout(width:number,height:number,columns:number,margin=DEFAULT_FORM_LAYOUT.margin){
+ if(!Number.isFinite(width)||!Number.isFinite(height)||!Number.isInteger(columns)||width<35||height<70||width>PAGE_WIDTH||height>PAGE_HEIGHT||columns<1||columns>4)throw new Error('Размер: ширина 35–210 мм, высота 70–297 мм; столбцов от 1 до 4.');
+ if(!Number.isFinite(margin)||margin<0||margin>20)throw new Error('Поля листа: от 0 до 20 мм.');
+ if(width*columns+FORM_GAP*(columns-1)>PAGE_WIDTH-2*margin)throw new Error('Бланки не помещаются по ширине A4. Уменьшите ширину, число столбцов или поля листа.');
+ if(height>PAGE_HEIGHT-2*margin)throw new Error('Бланк не помещается по высоте A4. Уменьшите высоту или поля листа.');
+ const rows=Math.floor((PAGE_HEIGHT-2*margin+FORM_GAP)/(height+FORM_GAP));return {rows,perPage:rows*columns};
 }
 const escape=(value:unknown)=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
-export function formDocument(book:FormBook,copies:PrintCopy[],width:number,height:number,columns:number):string {
- const {perPage}=formLayout(width,height,columns);
+export function formDocument(book:FormBook,copies:PrintCopy[],width:number,height:number,columns:number,margin=DEFAULT_FORM_LAYOUT.margin):string {
+ const {perPage}=formLayout(width,height,columns,margin);
  const cards=copies.map(c=>{
   const price=c.unit_price===null?'—':Number(c.unit_price).toFixed(2)+(c.currency==='KZT'?'':` ${c.currency}`);
   return `<article class="copy-form"><header><div class="classification"><span>${escape(book.index)}</span>${book.authorMark?`<span class="author-mark">${escape(book.authorMark)}</span>`:''}</div><strong>${escape(c.inventory_number)}</strong></header><section class="description"><b>${escape(book.author)}</b><div class="book-title">${escape(book.title)}</div><footer><b>${escape(book.year)}</b><b>${escape(price)}</b></footer></section><div class="writing-lines">${'<div><span></span><span></span></div>'.repeat(14)}</div></article>`;
  });
  const pages=[];for(let i=0;i<cards.length;i+=perPage)pages.push(`<div class="sheet">${cards.slice(i,i+perPage).join('')}</div>`);
  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Бланки экземпляров</title><style>
- @page{size:A4 portrait;margin:10mm}*{box-sizing:border-box}body{margin:0;color:#000;background:#eee;font-family:"Times New Roman",serif}.sheet{width:190mm;height:277mm;margin:10mm auto;padding:0;display:grid;grid-template-columns:repeat(${columns},${width}mm);grid-auto-rows:${height}mm;gap:5mm;justify-content:center;align-content:start;background:white;break-after:page}.sheet:last-child{break-after:auto}
- .copy-form{width:${width}mm;height:${height}mm;border:3px double #000;padding:2mm;display:flex;flex-direction:column;break-inside:avoid;font-size:9pt;overflow-wrap:anywhere}header{display:flex;justify-content:space-between;gap:2mm;font-weight:bold;font-size:10pt}header>*{min-width:0}.description{text-align:center;margin-top:5mm;flex-shrink:0}.book-title{margin-top:1mm;font-size:9pt}footer{display:flex;justify-content:space-around;gap:2mm;margin-top:2mm}.writing-lines{flex:1;min-height:12mm;display:flex;flex-direction:column;padding:2mm 1mm 0;gap:0}.writing-lines>div{flex:1;display:flex;gap:1.5mm;align-items:flex-end}.writing-lines span{flex:1;border-bottom:0.3pt solid black;min-width:0}
- header{align-items:flex-start}.classification{display:flex;flex-direction:column;gap:.7mm}
+ @page{size:A4 portrait;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0}body{color:#000;background:#eee;font-family:"Times New Roman",serif;font-size:9pt;line-height:1.15;-webkit-text-size-adjust:none;text-size-adjust:none}.sheet{width:${PAGE_WIDTH}mm;height:${PAGE_HEIGHT}mm;margin:0 auto 8mm;padding:${margin}mm;display:grid;grid-template-columns:repeat(${columns},${width}mm);grid-auto-rows:${height}mm;gap:${FORM_GAP}mm;justify-content:start;align-content:start;background:white;break-after:page}.sheet:last-child{break-after:auto;margin-bottom:0}
+ .copy-form{width:${width}mm;height:${height}mm;border:.3mm solid #000;padding:1mm;display:flex;flex-direction:column;break-inside:avoid;min-width:0;min-height:0;overflow-wrap:anywhere}header{display:flex;justify-content:space-between;align-items:flex-start;gap:1mm;font-weight:bold;font-size:10pt;flex-shrink:0}header>*{min-width:0}.classification{display:flex;flex-direction:column;gap:.5mm}.description{text-align:center;margin-top:1mm;flex-shrink:0}.book-title{margin-top:.5mm}footer{display:flex;justify-content:space-between;gap:1mm;margin-top:1mm}.writing-lines{flex:1;min-height:12mm;display:flex;flex-direction:column;padding:1mm 0 0;gap:0}.writing-lines>div{flex:1;display:flex;gap:1.5mm;align-items:flex-end}.writing-lines span{flex:1;border-bottom:.3pt solid black;min-width:0}
+ @media screen{.sheet{box-shadow:0 0 0 1px #ccc}}
  @media print{body{background:white}.sheet{margin:0}}
  </style></head><body>${pages.join('')}</body></html>`;
 }
