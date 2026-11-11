@@ -157,7 +157,7 @@ function applyPhotos(selections:PhotoSelection[]){
   editor.value.marc.fields=fields;prepareRecord(editor.value,activeType.value,specs.value);
   for(const f of fields)if(selections.some(s=>s.selected&&s.row.tag===f.tag))expanded.value.add(uid(f));
   gostPreview.value=null;recordTab.value='description';error.value='';
-  message.value='Выбранные сведения из фотографий вставлены в форму. Проверьте их и сохраните запись.';
+  message.value='Выбранные сведения вставлены в форму. Проверьте их и сохраните запись.';
  }catch(e){error.value=e instanceof Error?e.message:String(e);}
 }
 async function edit(r:RecordData){await run(async()=>{recordTab.value='description';editor.value=await api('/records/'+r.id);prepareRecord(editor.value!,activeType.value,specs.value);baseline.value=JSON.stringify(cleanRecord(editor.value!));expanded.value.clear();rawOpen.value=false;codedOpen.value=false;gostPreview.value=null;gostKind.value=activeType.value?.name==='Научная статья'?'component':'single';});}

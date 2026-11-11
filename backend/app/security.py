@@ -112,7 +112,7 @@ def permission_for(method,path):
     if path.startswith('/api/site-content'): return 'site.manage'
     # Mobile routes delegate this capability through a scoped token and recheck its owner's login.
     if path.startswith('/api/photo-transfer/'): return 'catalog.edit'
-    if path in ('/api/book-photos/config','/api/book-photos/analyze'): return 'catalog.edit'
+    if path in ('/api/book-photos/config','/api/book-photos/analyze','/api/book-photos/prompt','/api/book-photos/import-json'): return 'catalog.edit'
     if path.startswith('/api/circulation/'):
         suffix=path[len('/api/circulation/'):]
         if suffix=='options': return 'circulation.options'
