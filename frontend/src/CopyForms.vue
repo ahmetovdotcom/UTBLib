@@ -7,7 +7,7 @@ const busy=ref(false),error=ref(''),overflow=ref(false),ready=ref(false),copies=
 const selected=ref(new Set<number>()),query=ref('');
 const selectedCopies=computed(()=>selectedFormCopies(copies.value,selected.value));
 const filtered=computed(()=>filterFormCopies(copies.value,query.value));
-const width=ref(40),height=ref(100),columns=ref(3),revision=ref(0);
+const width=ref(85),height=ref(130),columns=ref(2),revision=ref(0);
 const layout=computed(()=>{try{return {value:formLayout(width.value,height.value,columns.value),error:''};}catch(e){return {value:null,error:(e as Error).message};}});
 const documentHtml=computed(()=>book.value&&selectedCopies.value.length&&layout.value.value?formDocument(book.value,selectedCopies.value,width.value,height.value,columns.value):'');
 watch(documentHtml,()=>{ready.value=false;overflow.value=false;revision.value++;},{flush:'sync'});
@@ -55,7 +55,7 @@ function print(){if(ready.value&&!overflow.value&&selectedCopies.value.length&&l
 <p v-if="selectedCopies.length&&layout.value" aria-live="polite">Бланков: {{selectedCopies.length}} · До {{layout.value.perPage}} на листе · Листов: {{Math.ceil(selectedCopies.length/layout.value.perPage)}}.</p>
 <p>Слева вверху — полочный индекс (090$a), а если он отсутствует — УДК (080$a). Под ним — авторский знак (090$x), если он заполнен в карточке. Цена берётся из экземпляра; «—» означает, что она не указана.</p>
 <p v-if="overflow" role="alert" class="inline-error">Текст не помещается в один из бланков. Увеличьте ширину или высоту.</p>
-<p>В окне печати выберите A4, масштаб 100%, отключите колонтитулы браузера.</p>
+<p>В окне печати выберите A4, масштаб 100% и поля «Нет». Если остаются дата, адрес сайта или номера страниц, отключите «Колонтитулы» (Headers and footers).</p>
 <div class="modal-actions"><button type="button" @click="close">Закрыть</button><button type="button" class="primary" :disabled="busy||!ready||overflow||!!layout.error||!selectedCopies.length" @click="print">Печатать / сохранить PDF</button></div>
 <iframe v-if="documentHtml" :key="revision" ref="frame" :srcdoc="documentHtml" title="Предпросмотр бланков экземпляров" @load="inspect"></iframe>
 </dialog>
