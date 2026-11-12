@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {usePageMemory,renderTask} from './navigation';
 import {computed, nextTick, onMounted, onUnmounted, ref} from 'vue';
 import AttendanceFilter from './AttendanceFilter.vue';
 import CopyDescription from './CopyDescription.vue';
@@ -38,7 +39,8 @@ async function download(format:'xlsx'|'csv'){
  if(!data.value||exporting.value)return;exporting.value=true;error.value='';const snapshot=clone(data.value.filters);
  try{const r=await fetch('/api/statistics/circulation/export?'+query(snapshot)+'&format='+format,{credentials:'same-origin'});if(!r.ok){const v=await r.json();throw Error(typeof v.detail==='string'?v.detail:'Не удалось выгрузить отчёт');}const url=URL.createObjectURL(await r.blob()),a=document.createElement('a');a.href=url;a.download='Книговыдача '+snapshot.date_from+' — '+snapshot.date_to+'.'+format;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(e){error.value=String(e);}finally{exporting.value=false;}
 }
-onMounted(()=>{loadOptions();load();});onUnmounted(()=>generation++);
+usePageMemory('circulation-statistics',{form,offset,metric});
+onMounted(()=>{const savedOffset=offset.value;return renderTask(Promise.all([loadOptions(),load()]).then(()=>{offset.value=savedOffset;}));});onUnmounted(()=>generation++);
 </script>
 <template>
 <section class="loan-statistics">

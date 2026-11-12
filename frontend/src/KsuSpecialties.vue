@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {usePageMemory,usePageRoute,routeId} from './navigation';
 import './ksuTables.css';
 import KsuTableView from './KsuTableView.vue';
 import KsuSpecialtyAllocation from './KsuSpecialtyAllocation.vue';
@@ -12,7 +13,9 @@ const money=(v:any)=>Number(v||0).toLocaleString('ru-RU',{minimumFractionDigits:
 const date=(v:string)=>v.split('-').reverse().join('.');
 async function load(){if(busy.value)return;busy.value=true;error.value='';data.value=null;try{data.value=await props.api('/ksu/specialties/report?'+new URLSearchParams({date_from:from.value,date_to:to.value}));}catch(e){error.value=e instanceof Error?e.message:String(e);}finally{busy.value=false;}}
 async function download(){if(!data.value||busy.value)return;busy.value=true;error.value='';try{const q=new URLSearchParams({date_from:data.value.date_from,date_to:data.value.date_to});const r=await fetch('/api/ksu/specialties/export?'+q,{credentials:'same-origin'});if(!r.ok){const d=await r.json();throw Error(typeof d.detail==='string'?d.detail:'Не удалось выгрузить отчёт');}const url=URL.createObjectURL(await r.blob());const a=document.createElement('a');a.href=url;a.download='КСУ-по-специальностям.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(e){error.value=e instanceof Error?e.message:String(e);}finally{busy.value=false;}}
-onMounted(load);
+usePageMemory('ksu-specialties',{from,to});
+const navigation=usePageRoute('ksu',q=>{allocationEntry.value=routeId(q,'allocation')||null;},load);
+function showAllocation(id:number|null){if(navigation.go({...navigation.router?.currentRoute.value.query,tab:'specialties',allocation:id||undefined}))return;allocationEntry.value=id;}
 </script>
 <template>
 <section :aria-busy="busy">
@@ -26,13 +29,13 @@ onMounted(load);
   <p v-if="data.total.unpriced_count" role="alert" class="inline-error">Без цены в тенге: {{data.total.unpriced_count}} экз. Показана только известная сумма. Для выгрузки исправьте цены экземпляров.</p>
   <div class="card holdings"><div class="specialty-summary"><span><b>{{data.rows.length}}</b> записей КСУ</span><span><b>{{data.total.titles}}</b> наименований по КСУ</span><span><b>{{data.total.copies}}</b> экземпляров</span><span><b>{{money(data.total.amount)}} ₸</b> {{data.total.unpriced_count?'известная сумма':'общая сумма'}}</span></div>
    <KsuTableView class="specialty-table" :title="'По специальностям · '+date(data.date_from)+' — '+date(data.date_to)" :frozen-columns="2"><table class="ksu-grid"><thead><tr><th rowspan="2">№ КСУ / дата</th><th rowspan="2">Источник / документ</th><th v-for="c in data.columns" :key="c.key" colspan="3" class="specialty-name">{{c.label}}</th><th colspan="3">Всего</th></tr><tr><template v-for="c in data.columns" :key="c.key"><th>Наим.</th><th>Экз.</th><th>Сумма, ₸</th></template><th>Наим.</th><th>Экз.</th><th>Сумма, ₸</th></tr></thead>
-   <tbody><tr v-for="r in data.rows" :key="r.id"><td><span>{{r.number}}/{{r.year}}</span><small>{{date(r.received_on)}}</small><button :disabled="busy" @click="allocationEntry=r.id">Распределение</button></td><td>{{r.source}}<small>{{r.invoice||'Без номера документа'}}</small></td><template v-for="c in data.columns" :key="c.key"><td>{{r.groups[c.key]?.titles||0}}</td><td>{{r.groups[c.key]?.copies||0}}</td><td>{{money(r.groups[c.key]?.amount)}}</td></template><td>{{r.total.titles}}</td><td>{{r.total.copies}}</td><td>{{money(r.total.amount)}}</td></tr></tbody>
+   <tbody><tr v-for="r in data.rows" :key="r.id"><td><span>{{r.number}}/{{r.year}}</span><small>{{date(r.received_on)}}</small><button :disabled="busy" @click="showAllocation(r.id)">Распределение</button></td><td>{{r.source}}<small>{{r.invoice||'Без номера документа'}}</small></td><template v-for="c in data.columns" :key="c.key"><td>{{r.groups[c.key]?.titles||0}}</td><td>{{r.groups[c.key]?.copies||0}}</td><td>{{money(r.groups[c.key]?.amount)}}</td></template><td>{{r.total.titles}}</td><td>{{r.total.copies}}</td><td>{{money(r.total.amount)}}</td></tr></tbody>
    <tfoot><tr><th colspan="2">Итого</th><template v-for="c in data.columns" :key="c.key"><td>{{data.totals[c.key].titles}}</td><td>{{data.totals[c.key].copies}}</td><td>{{money(data.totals[c.key].amount)}}</td></template><td>{{data.total.titles}}</td><td>{{data.total.copies}}</td><td>{{money(data.total.amount)}}</td></tr></tfoot></table></KsuTableView>
    <p v-if="!data.rows.length" class="empty">За выбранный период поступлений нет.</p>
   </div>
   <section v-if="data.issue_count" class="card holdings"><h2>Пояснения к распределению</h2><template v-for="r in data.rows" :key="r.id"><article v-if="r.issues.length"><h3>КСУ {{r.number}}/{{r.year}} · {{r.source}}</h3><button v-if="r.acquisition_id" @click="emit('receipt',r.acquisition_id)">Открыть поступление</button><div v-for="(issue,i) in r.issues" :key="i"><button @click="emit('record',issue.record_id)">{{issue.title}} · запись №{{issue.record_id}}</button><ul><li v-for="text in issue.messages" :key="text">{{text}}</li></ul></div></article></template></section>
  </template>
-<KsuSpecialtyAllocation v-if="allocationEntry!==null" :entry-id="allocationEntry" :api="api" @close="allocationEntry=null" />
+<KsuSpecialtyAllocation v-if="allocationEntry!==null" :key="allocationEntry" :entry-id="allocationEntry" :api="api" @close="showAllocation(null)" />
 </section>
 </template>
 <style scoped>

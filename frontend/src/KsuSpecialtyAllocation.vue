@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import {renderTask} from './navigation';
 import {ref,computed,onMounted} from 'vue';
 const props=defineProps<{entryId:number,api:(path:string,method?:string,body?:unknown)=>Promise<any>}>();
 const emit=defineEmits<{close:[]}>();
 const dialog=ref<HTMLDialogElement>(),data=ref<any>(null),busy=ref(false),error=ref(''),query=ref('');
 const items=computed(()=>data.value?.items.filter((r:any)=>(r.title+' '+r.record_id).toLocaleLowerCase().includes(query.value.trim().toLocaleLowerCase()))||[]);
 async function load(){busy.value=true;error.value='';try{data.value=await props.api(`/ksu/entries/${props.entryId}/specialties`);}catch(e){error.value=e instanceof Error?e.message:String(e);}finally{busy.value=false;}}
-onMounted(()=>{dialog.value?.showModal();load();});
+onMounted(()=>{dialog.value?.showModal();renderTask(load());});
 </script>
 <template>
 <dialog ref="dialog" class="card allocation-dialog" aria-labelledby="allocation-title" @cancel.prevent="!busy&&emit('close')">

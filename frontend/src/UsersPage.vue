@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {useNavigationGuard} from './navigation';
 import {ref,onMounted,nextTick} from 'vue';
 const props=defineProps<{api:(path:string,method?:string,body?:unknown)=>Promise<any>,currentId:number}>();
 const emit=defineEmits<{selfChanged:[]}>();
@@ -13,6 +14,7 @@ async function open(user?:any){error.value='';draft.value=user?{...user,permissi
 function chooseRole(){draft.value.permissions=[...(presets.value[draft.value.role]||[])];}
 async function save(){await run(async()=>{const {id,...body}=draft.value;if(!body.password)delete body.password;await props.api('/users'+(id?'/'+id:''),id?'PUT':'POST',body);dialog.value?.close();draft.value=null;if(id===props.currentId){emit('selfChanged');return;}notice.value=id?'Права обновлены. Пользователю нужно войти заново.':'Пользователь создан.';await load();});}
 onMounted(()=>run(load));
+useNavigationGuard('users',()=>!!draft.value,()=>busy.value);
 </script>
 <template><section><div class="page-heading"><div><h1>Пользователи и права</h1><p>Администраторы имеют полный доступ. Для остальных сотрудников настройте разрешённые действия.</p></div><button class="primary" :disabled="busy" @click="open()">Создать пользователя</button><button :disabled="busy" @click="run(load)">Обновить список</button></div>
 <p v-if="error&&!draft&&!deleteTarget" role="alert">{{error}}</p><p v-if="notice" role="status">{{notice}}</p>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {usePageMemory,renderTask} from './navigation';
 import {ref,onMounted,onUnmounted,watch,nextTick} from 'vue';
 import VisitQrPoints from './VisitQrPoints.vue';
 const props=defineProps<{api:(path:string,method?:string,body?:any)=>Promise<any>,can:(permission:string)=>boolean,initialCode?:string}>();
@@ -12,7 +13,8 @@ watch(code,()=>{const token=++generation;found.value=null;error.value='';clearTi
 async function refresh(){if(props.can('visits.view')){[journal.value,stats.value]=await Promise.all([props.api('/visits?offset='+offset.value),props.api('/visits/analytics')]);}}
 async function scan(){if(busy.value)return;busy.value=true;error.value='';clearTimeout(timer);generation++;try{result.value=await props.api('/visits','POST',{code:code.value,branch_id:branch.value,notes:notes.value,source:'desk'});code.value='';notes.value='';found.value=null;offset.value=0;await refresh();}catch(e){error.value=String(e);}finally{busy.value=false;await nextTick();input.value?.focus();}}
 onUnmounted(()=>{generation++;clearTimeout(timer);});
-onMounted(async()=>{try{branches.value=(await props.api('/reader-branches')).filter((b:any)=>b.active);if(!branches.value.some(b=>b.id===branch.value))branch.value=branches.value[0]?.id||null;await refresh();input.value?.focus();}catch(e){error.value=String(e);}});
+usePageMemory('visits',{offset});
+onMounted(()=>renderTask((async()=>{try{branches.value=(await props.api('/reader-branches')).filter((b:any)=>b.active);if(!branches.value.some(b=>b.id===branch.value))branch.value=branches.value[0]?.id||null;await refresh();input.value?.focus();}catch(e){error.value=String(e);}})()));
 </script>
 <template>
 <section class="visits-page" :aria-busy="busy">

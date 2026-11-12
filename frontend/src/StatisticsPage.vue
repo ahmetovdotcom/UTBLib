@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {usePageMemory,renderTask} from './navigation';
 import {ref,onMounted} from 'vue';
 const props=defineProps<{api:(path:string,method?:string,body?:any)=>Promise<any>}>();
 defineEmits<{record:[id:number]}>();
@@ -9,7 +10,8 @@ async function load(reset=true){if(reset)offset.value=0;const token=++request;bu
  const result=await props.api('/statistics/staff?'+q);if(token===request)data.value=result;
 }catch(e:any){if(token===request){error.value=e.message;data.value=null;}}finally{if(token===request)busy.value=false;}}
 function date(value:string){return new Date(value).toLocaleString('ru-RU',{timeZone:'Asia/Almaty'});}
-onMounted(()=>load());
+usePageMemory('statistics',{from,to,employee,action,offset});
+onMounted(()=>renderTask(load(false)));
 </script>
 <template>
 <section class="staff-stats">

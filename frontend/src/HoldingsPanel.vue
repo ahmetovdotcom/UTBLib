@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import CopyForms from './CopyForms.vue';
 import CopyFields from './CopyFields.vue';
+import {useNavigationGuard} from './navigation';
 import {authStorage} from "./authStorage";
 import {ref,watch,onMounted,nextTick} from 'vue';
 const props=defineProps<{canEdit:boolean,recordId:number,title:string,api:(path:string,method?:string,body?:unknown)=>Promise<any>}>();
@@ -45,6 +46,7 @@ async function showHistory(){history.value=await props.api('/copies/'+copyDraft.
 function onUnload(e:BeforeUnloadEvent){if(draft.value||copyDraft.value){e.preventDefault();e.returnValue='';}}
 onMounted(()=>{try{pending.value=JSON.parse(authStorage.getItem('pending-existing-copy')||'null');}catch{}run(load);});
 watch(()=>props.recordId,()=>{offset.value=0;query.value='';run(load);});
+useNavigationGuard('catalog',()=>!!draft.value||!!copyDraft.value,()=>busy.value);
 // Native dialogs prevent navigation under an open form; pending operations survive a page reload.
 import {onUnmounted} from 'vue';
 onMounted(()=>window.addEventListener('beforeunload',onUnload));onUnmounted(()=>window.removeEventListener('beforeunload',onUnload));

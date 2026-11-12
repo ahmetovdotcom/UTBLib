@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {usePageMemory,renderTask} from './navigation';
 import {computed, nextTick, onMounted, onUnmounted, ref} from 'vue';
 import AttendanceFilter from './AttendanceFilter.vue';
 
@@ -102,7 +103,13 @@ async function loadJournal(){
 }
 function closeJournal(){journalGeneration++;journalFilters.value=null;journal.value=null;journalBusy.value=false;}
 function journalPage(delta:number){journalOffset.value+=delta;loadJournal();}
-onMounted(async()=>{await Promise.all([loadOptions(),load()]);});
+usePageMemory('attendance:'+base,{form,advanced,metric,chartMode,tableOffset,breakdownOffset,breakdownSearch,journalFilters,journalOffset});
+onMounted(()=>renderTask((async()=>{
+ const saved={table:tableOffset.value,breakdown:breakdownOffset.value,journal:journalFilters.value,offset:journalOffset.value};
+ await Promise.all([loadOptions(),load()]);
+ tableOffset.value=saved.table;breakdownOffset.value=saved.breakdown;journalFilters.value=saved.journal;journalOffset.value=saved.offset;
+ if(journalFilters.value)await loadJournal();
+})()));
 onUnmounted(()=>{generation++;journalGeneration++;});
 </script>
 

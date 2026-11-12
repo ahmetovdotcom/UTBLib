@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import {useNavigationGuard} from './navigation';
+import {usePageMemory,renderTask} from './navigation';
 import {authStorage} from "./authStorage";
 import {ref,onMounted} from 'vue';
 const props=defineProps<{canCreate:boolean,api:(path:string,method?:string,body?:unknown)=>Promise<any>}>();
@@ -10,7 +12,9 @@ async function run(fn:()=>Promise<void>){if(busy.value)return;busy.value=true;er
 async function find(){await run(async()=>{copy.value=null;draft.value=null;notice.value='';const found=await props.api('/copies/lookup?inventory_number='+encodeURIComponent(inventory.value.trim()));copy.value=found;if(found.status==='active')draft.value={request_key:crypto.randomUUID(),copy_id:found.id,version:found.version,withdrawn_on:today(),act_number:'',reason:'',note:''};});}
 function forget(){authStorage.removeItem('pending-withdrawal');pending.value=null;}
 async function post(body:any){pending.value=body;authStorage.setItem('pending-withdrawal',JSON.stringify(body));let result;try{result=await props.api('/withdrawals','POST',body);}catch(e){const status=(e as any).status;if(status>=400&&status<500)forget();throw e;}forget();notice.value=`Экземпляр ${result.snapshot.inventory_number} списан. Акт: ${result.act_number}.`;copy.value=null;draft.value=null;offset.value=0;await load();}
-onMounted(()=>{try{pending.value=JSON.parse(authStorage.getItem('pending-withdrawal')||'null');}catch{}run(load);});
+usePageMemory('withdrawals',{offset});
+onMounted(()=>{try{pending.value=JSON.parse(authStorage.getItem('pending-withdrawal')||'null');}catch{}renderTask(run(load));});
+useNavigationGuard('withdrawals',()=>!!draft.value,()=>busy.value);
 </script>
 <template>
 <section class="withdrawals-page">

@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "vue-tsc --noEmit && vite build",
-    "test": "node --experimental-strip-types --test tests/*.test.ts"
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "test:navigation": "node tests/navigation-browser.mjs"
   },
   "dependencies": {
-    "vue": "3.5.44"
+    "vue": "3.5.44",
+    "vue-router": "4.6.4"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "5.2.3",

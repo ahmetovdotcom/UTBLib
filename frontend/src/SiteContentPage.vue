@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {usePageRoute,usePageMemory,useNavigationGuard,routeTab} from './navigation';
 import {computed,onMounted,ref} from 'vue';
 const props=defineProps<{api:(path:string,method?:string,body?:any)=>Promise<any>,csrf:string}>();
 const sections:Record<string,string>={resources:'Ресурсы',repository:'Репозиторий',news:'Новости',events:'События'};
@@ -15,14 +16,16 @@ async function load(){const r=await props.api(`/site-content?kind=${kind.value}&
 function open(item?:any){editor.value=item?JSON.parse(JSON.stringify(item)):{kind:kind.value,slug:'',status:'draft',published_at:null,data:{translations:{},featured:false,url:'',resource_type:'open_access',access_type:'open',category:'',authors:[],keywords:[],content_types:[],audiences:[],work_type:'scientific_article',language:'ru',access_policy:'metadata_only'},assets:{}};for(const l of Object.keys(languages))editor.value.data.translations[l]??={title:'',description:'',body:'',instructions:'',venue:'',image_alt:''};locale.value='ru';baseline.value=JSON.stringify(editor.value);error.value='';message.value='';}
 function close(){if(JSON.stringify(editor.value)!==baseline.value&&!window.confirm('Закрыть без сохранения изменений?'))return;editor.value=null;error.value='';}
 async function save(){await run(async()=>{const e=editor.value;if(e.data.year==='')e.data.year=null;const saved=await props.api('/site-content'+(e.id?'/'+e.id:''),e.id?'PUT':'POST',{kind:e.kind,slug:e.slug,status:e.status,version:e.version,published_at:e.published_at||null,data:e.data});open(saved);await load();message.value=saved.status==='published'?'Сохранено. Материал доступен на сайте после наступления даты публикации.':'Материал сохранён.';});}
-async function switchSection(k:string){if(editor.value){close();if(editor.value)return;}kind.value=k;page.value=1;q.value='';await run(load);}
+async function switchSection(k:string){if(navigation.go({tab:k}))return;if(editor.value){close();if(editor.value)return;}kind.value=k;page.value=1;q.value='';await run(load);}
 function changeList(key:string,event:Event){editor.value.data[key]=(event.target as HTMLTextAreaElement).value.split('\n').map(v=>v.trim()).filter(Boolean);}
 function localDate(value:string|null){if(!value)return '';const d=new Date(value);return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);}
 function setDate(key:string,event:Event){const value=(event.target as HTMLInputElement).value;const target=key==='published_at'?editor.value:editor.value.data;target[key]=value?new Date(value).toISOString():null;}
 async function upload(slot:string,event:Event){const input=event.target as HTMLInputElement,file=input.files?.[0];if(!file)return;await run(async()=>{if(file.size>(slot==='pdf'?25:8)*1024*1024)throw new Error('Файл слишком большой: изображение до 8 МБ, PDF до 25 МБ');const e=editor.value;const response=await fetch(`/api/site-content/${e.id}/assets/${slot}?version=${e.version}`,{method:'PUT',headers:{'X-CSRF-Token':props.csrf,'Content-Type':file.type||'application/octet-stream'},body:file});const data=await response.json();if(!response.ok)throw new Error(typeof data.detail==='string'?data.detail:'Не удалось загрузить файл');open(data);await load();message.value='Файл сохранён.';});input.value='';}
 async function removeAsset(slot:string){await run(async()=>{const e=editor.value;open(await props.api(`/site-content/${e.id}/assets/${slot}?version=${e.version}`,'DELETE'));await load();});}
 const cleanEditor=computed(()=>JSON.stringify(editor.value)===baseline.value);
-onMounted(()=>run(load));
+usePageMemory('site',{kind,page,q});
+const navigation=usePageRoute('site',async query=>{const target=routeTab(query,Object.keys(sections),'resources');if(kind.value!==target){kind.value=target;page.value=1;q.value='';}editor.value=null;await run(load);});
+useNavigationGuard('site',()=>!!editor.value&&!cleanEditor.value,()=>busy.value);
 </script>
 
 <template>

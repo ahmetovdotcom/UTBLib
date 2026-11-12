@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import {useRouter,useRoute} from 'vue-router';
+import {sections,allowedSection,firstSection,routeId,routeText,routeTab,usePageRoute,useNavigationGuard,clearNavigationMemory} from './navigation';
 import PrimarySpecialties from './PrimarySpecialties.vue';
 import {authStorage} from "./authStorage";
 import {computed,ref,toRaw,onMounted,onUnmounted,watch,nextTick} from 'vue';
@@ -29,10 +31,14 @@ import VisitsPage from './VisitsPage.vue';
 import EventsPage from './EventsPage.vue';
 import AttendancePage from './AttendancePage.vue';
 import SiteContentPage from './SiteContentPage.vue';
-const issueReaderId=ref<number|null>(null);
-async function openReaderIssue(id:number){issueReaderId.value=id;page.value='circulation';await nextTick();window.scrollTo(0,0);}
-const readersPage=ref<InstanceType<typeof ReadersPage>|null>(null),visitCode=ref('');
-async function openReader(id:number){page.value='readers';await nextTick();await readersPage.value?.open(id);}
+const router=useRouter(),route=useRoute();
+const page=computed({get:()=>String(route.name||'catalog'),set:(name:string)=>{void router.push({name});}});
+const canGoBack=computed(()=>{void route.fullPath;return typeof window.history.state?.back==='string';});
+function goBack(){if(canGoBack.value)router.back();}
+const recordOrigin=ref('/catalog');
+function openReaderIssue(id:number){void router.push({name:'circulation',query:{tab:'issue',reader:id}});}
+const visitCode=ref('');
+function openReader(id:number){void router.push({name:'readers',query:{reader:id}});}
 function openVisit(code:string){visitCode.value=code;page.value='visits';}
 
 const statisticsOpen=ref(false);
@@ -41,26 +47,24 @@ import WithdrawalsPage from './WithdrawalsPage.vue';
 import VocabularySettings from './VocabularySettings.vue';
 import SettingsTransfer from './SettingsTransfer.vue';
 import {fieldName,subName,ru} from './ru';
-const acquisitionsPage=ref<InstanceType<typeof AcquisitionsPage>|null>(null);
-async function openKsuReceipt(id:number){if(!can('acquisitions.view')){error.value='Для просмотра поступления требуется право «Просмотр поступлений».';return;}page.value='acquisitions';await nextTick();await acquisitionsPage.value?.openReceipt(id);}
-async function openKsuRecord(id:number){recordReturnPage.value='catalog';page.value='catalog';await edit({id} as RecordData);window.scrollTo(0,0);}
-const recordReturnPage=ref('catalog');
-function openAttention(){if(busy.value)return;recordReturnPage.value='attention';moduleOpen.value=true;closeEditor();}
-async function openAttentionRecord(id:number){if(busy.value)return;await edit({id} as RecordData);if(editor.value?.id===id){recordReturnPage.value='attention';page.value='catalog';window.scrollTo(0,0);}}
-function finishCloseEditor(){editor.value=null;rawOpen.value=false;confirmClose.value=false;page.value=recordReturnPage.value;window.scrollTo(0,0);}
+function openKsuReceipt(id:number){void router.push({name:'acquisitions',query:{receipt:id}});}
+async function openKsuRecord(id:number){await edit({id} as RecordData);}
+function openAttention(){moduleOpen.value=true;page.value='attention';}
+async function openAttentionRecord(id:number){await edit({id} as RecordData);}
+function finishCloseEditor(){editor.value=null;rawOpen.value=false;if(window.history.state?.back===recordOrigin.value)router.back();else void router.push(recordOrigin.value);}
 const moduleOpen=ref(false),deleteTarget=ref<RecordData|null>(null),deleteDialog=ref<HTMLDialogElement|null>(null);
 watch(deleteTarget,async target=>{await nextTick();if(target){error.value='';deleteDialog.value?.showModal();}else deleteDialog.value?.close();});
 const vocabularyEntries=ref<any[]>([]);
 const username=ref(''),password=ref(''),csrf=ref(''),currentUser=ref<any>(null);
 function can(permission:string){return currentUser.value?.role==='admin'||currentUser.value?.permissions.includes(permission);}
-const connected=ref(false),busy=ref(false),error=ref(''),message=ref(''),page=ref('catalog');
+const connected=ref(false),busy=ref(false),error=ref(''),message=ref('');
 const localFields=ref<Spec[]>([]),defaultConfig=ref<Config[]>([]),markerField:MF={tag:'000'},gostKind=ref<'single'|'component'>('single'),gostPreview=ref<any>(null),gostSource=ref('');
 const dictionary=ref<Spec[]>([]),types=ref<DT[]>([]),records=ref<RecordData[]>([]),q=ref(''),filterType=ref(0),offset=ref(0);
 const advancedOpen=ref(false),searchConditions=ref<SearchCondition[]>([]),searchMatch=ref<'all'|'any'>('all'),appliedSearch=ref(emptyCatalogSearch());
 const draftSearch=()=>({q:q.value,type_id:filterType.value,udc:'',conditions:searchConditions.value,match:searchMatch.value});
 const searchChanged=computed(()=>JSON.stringify(draftSearch())!==JSON.stringify(appliedSearch.value));
 const hasSearch=computed(()=>!!(appliedSearch.value.q||appliedSearch.value.type_id||appliedSearch.value.conditions.length));
-const profile=ref<DT>({id:0,name:'',config:[]}),fieldQuery=ref(''),editor=ref<RecordData|null>(null),baseline=ref('');
+const profile=ref<DT>({id:0,name:'',config:[]}),profileBaseline=ref(''),fieldQuery=ref(''),editor=ref<RecordData|null>(null),baseline=ref('');
 watch(()=>page.value==='catalog'&&editor.value!==null,opened=>{
  if(opened)window.scrollTo({top:0,left:0,behavior:'instant'});
 },{flush:'post'});
@@ -68,11 +72,11 @@ const codedOpen=ref(false),recordTab=ref('description'),creationKey=ref('');
 const pendingRecord=ref<any>(null);
 try{pendingRecord.value=JSON.parse(authStorage.getItem('pending-record')||'null');}catch{}
 function clearPendingRecord(){authStorage.removeItem('pending-record');pendingRecord.value=null;}
-async function acceptSaved(saved:any){editor.value={id:saved.id,type_id:saved.type_id,version:saved.version,primary_specialty:saved.primary_specialty,marc:saved.marc};prepareRecord(editor.value!,activeType.value,specs.value);baseline.value=JSON.stringify(cleanRecord(editor.value!));rawOpen.value=false;await loadVocabulary();message.value='Запись сохранена'+(saved.warnings.length?' · '+saved.warnings.map(localError).join('; '):'');await search();}
-async function postNewRecord(body:any){authStorage.setItem('pending-record',JSON.stringify(body));pendingRecord.value=body;let saved;try{saved=await api('/records','POST',body);}catch(e){const status=(e as any).status;if(status>=400&&status<500)clearPendingRecord();throw e;}clearPendingRecord();await acceptSaved(saved);recordTab.value=body.initial_acquisition?'holdings':'description';}
-async function recoverRecord(){await run(async()=>{await postNewRecord(pendingRecord.value);page.value='catalog';});}
+async function acceptSaved(saved:any){editor.value={id:saved.id,type_id:saved.type_id,version:saved.version,primary_specialty:saved.primary_specialty,marc:saved.marc};prepareRecord(editor.value!,activeType.value,specs.value);baseline.value=JSON.stringify(cleanRecord(editor.value!));await router.replace({name:'catalog',query:{record:saved.id,tab:recordTab.value},state:{recordOrigin:recordOrigin.value}});rawOpen.value=false;await loadVocabulary();message.value='Запись сохранена'+(saved.warnings.length?' · '+saved.warnings.map(localError).join('; '):'');await search();}
+async function postNewRecord(body:any){authStorage.setItem('pending-record',JSON.stringify(body));pendingRecord.value=body;let saved;try{saved=await api('/records','POST',body);}catch(e){const status=(e as any).status;if(status>=400&&status<500)clearPendingRecord();throw e;}clearPendingRecord();recordTab.value=body.initial_acquisition?'holdings':'description';await acceptSaved(saved);}
+async function recoverRecord(){await run(async()=>{await postNewRecord(pendingRecord.value);});}
 
-const expanded=ref(new Set<number>()),addCode=ref<Record<number,string>>({}),raw=ref(''),rawOpen=ref(false),confirmClose=ref(false);
+const expanded=ref(new Set<number>()),addCode=ref<Record<number,string>>({}),raw=ref(''),rawOpen=ref(false);
 const menu=ref<{x:number,y:number,field:MF,sub?:SF}|null>(null),referenceTag=ref('245'),showObsolete=ref(false);
 const ids=new WeakMap<object,number>();let nextId=0;
 function uid(o:object){o=toRaw(o);if(!ids.has(o))ids.set(o,++nextId);return ids.get(o)!;}
@@ -102,9 +106,16 @@ function localError(detail:unknown):string{
  return s.replace(/indicator (\d) must be one ASCII character/g,'индикатор $1 должен содержать один символ ASCII').replace(/control field must have only value/g,'контрольное поле должно содержать только значение').replace(/data field needs subfields, not value/g,'поле должно содержать подполя вместо одного значения').replace(/invalid indicator (\d):/g,'недопустимое значение индикатора $1:').replace(/expected (\d+) characters/g,'необходимо $1 символов');
 }
 async function api(path:string,method='GET',body?:unknown){const r=await fetch('/api'+path,{method,credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf.value},body:body===undefined?undefined:JSON.stringify(body)});if(r.status===204)return null;const data=await r.json();if(!r.ok){if(r.status===401&&path!=='/auth/login'){signedOut();}throw Object.assign(Error(localError(data.detail)),{status:r.status,usage:data.usage});}return data;}
-function signedOut(){q.value='';filterType.value=0;searchConditions.value=[];searchMatch.value='all';advancedOpen.value=false;appliedSearch.value=emptyCatalogSearch();offset.value=0;recordReturnPage.value='catalog';connected.value=false;currentUser.value=null;csrf.value='';editor.value=null;pendingRecord.value=null;records.value=[];menu.value=null;rawOpen.value=false;confirmClose.value=false;deleteTarget.value=null;setUserScope(null);page.value='catalog';message.value='Войдите с логином и паролем.';}
+function signedOut(){q.value='';filterType.value=0;searchConditions.value=[];searchMatch.value='all';advancedOpen.value=false;appliedSearch.value=emptyCatalogSearch();offset.value=0;connected.value=false;currentUser.value=null;csrf.value='';editor.value=null;pendingRecord.value=null;records.value=[];menu.value=null;rawOpen.value=false;deleteTarget.value=null;setUserScope(null);clearNavigationMemory();message.value='Войдите с логином и паролем.';}
 async function logout(){if(dirty.value&&!window.confirm('Выйти без сохранения изменений записи?'))return;await run(async()=>{await api('/auth/logout','POST');signedOut();});}
-async function loadSession(data:any){currentUser.value=data.user;csrf.value=data.csrf_token;setUserScope(data.user.id);try{pendingRecord.value=JSON.parse(authStorage.getItem('pending-record')||'null');}catch{pendingRecord.value=null;}if(can('catalog.view')){const d=await api('/dictionary');dictionary.value=d.fields;localFields.value=d.local_fields||[];defaultConfig.value=d.default_config||[];types.value=await api('/types');selectProfile(types.value[0]);await search();}page.value=can('catalog.view')?'catalog':can('readers.registry.view')?'readers':can('loans.view_own')?'circulation':can('site.manage')?'site':can('events.view')?'events':'visits';if(location.hash==='#circulation'&&(can('circulation.issue')||can('circulation.return')||can('loans.view_own')))page.value='circulation';if(location.hash==='#readers'&&can('readers.registry.view'))page.value='readers';if(location.hash==='#visits'&&(can('visits.view')||can('visits.record')))page.value='visits';if(location.hash==='#events'&&can('events.view'))page.value='events';if(location.hash==='#attendance'&&can('visits.view'))openAttendance();if(location.hash==='#circulation-statistics'&&can('statistics.view')){page.value='circulation-statistics';statisticsOpen.value=true;}if(location.hash==='#site'&&can('site.manage'))page.value='site';editor.value=null;moduleOpen.value=false;connected.value=true;}
+async function loadSession(data:any){
+ currentUser.value=data.user;csrf.value=data.csrf_token;setUserScope(data.user.id);
+ try{pendingRecord.value=JSON.parse(authStorage.getItem('pending-record')||'null');}catch{pendingRecord.value=null;}
+ if(can('catalog.view')){const d=await api('/dictionary');dictionary.value=d.fields;localFields.value=d.local_fields||[];defaultConfig.value=d.default_config||[];types.value=await api('/types');selectProfile(types.value[0]);await search();}
+ editor.value=null;connected.value=true;
+ if(page.value!=='not-found'&&!allowedSection(page.value,can,currentUser.value.role==='admin'))await router.replace({name:firstSection(can,currentUser.value.role==='admin')});
+ await nextTick();await catalogNavigation.refresh();
+}
 async function restoreSession(){try{await loadSession(await api('/auth/me'));}catch{signedOut();}}
 async function run(fn:()=>Promise<void>){if(busy.value)return;busy.value=true;error.value='';message.value='';try{await fn();}catch(e){error.value=e instanceof Error?e.message:String(e);}finally{busy.value=false;}}
 async function login(){await run(async()=>{const data=await api('/auth/login','POST',{username:username.value,password:password.value});password.value='';await loadSession(data);});}
@@ -114,7 +125,7 @@ function vocabEntries(f:MF,code:string){return vocabularyEntries.value.filter(e=
 async function loadVocabulary(){const id=editor.value?.type_id;vocabularyEntries.value=[];if(!id)return;try{const entries=await api('/types/'+id+'/vocabulary');if(editor.value?.type_id===id)vocabularyEntries.value=entries;}catch(e){error.value=String(e);}}
 watch(()=>editor.value?.type_id,loadVocabulary);
 watch(page,()=>{if(page.value==='catalog'&&editor.value)loadVocabulary();});
-async function changeCatalogPage(delta:number){await run(async()=>{const previous=offset.value;offset.value=Math.max(0,previous+delta);try{await search();}catch(e){offset.value=previous;throw e;}await nextTick();window.scrollTo({top:0,left:0,behavior:'instant'});});}
+async function changeCatalogPage(delta:number){await run(async()=>{const previous=offset.value;offset.value=Math.max(0,previous+delta);try{await search();}catch(e){offset.value=previous;throw e;}await router.push({name:'catalog',query:offset.value?{offset:offset.value}:{}});});}
 async function search(){records.value=await fetchCatalogRecords(api,appliedSearch.value,offset.value);}
 function openAdvancedSearch(){error.value='';advancedOpen.value=true;}
 async function applyAdvancedSearch(conditions:SearchCondition[],match:'all'|'any'){await run(async()=>{const previous=searchConditions.value,previousMatch=searchMatch.value;try{searchConditions.value=conditions;searchMatch.value=match;await applyCatalogSearch();advancedOpen.value=false;}catch(e){searchConditions.value=previous;searchMatch.value=previousMatch;throw e;}});}
@@ -123,13 +134,14 @@ async function applyCatalogSearch(){
  let filters;try{filters=normalizeCatalogSearch(draftSearch());}catch(e){advancedOpen.value=true;throw e;}
  const found=await fetchCatalogRecords(api,filters);
  appliedSearch.value=filters;offset.value=0;records.value=found;
+ if(page.value==='catalog'&&!route.query.record&&route.query.offset)await router.replace({name:'catalog'});
  if(JSON.stringify(draftSearch())===submitted){q.value=filters.q;searchConditions.value=filters.conditions.map(c=>({...c}));}
 }
 async function resetCatalogSearch(){q.value='';filterType.value=0;searchConditions.value=[];searchMatch.value='all';await applyCatalogSearch();}
 
-function selectProfile(t?:DT){profile.value=t?JSON.parse(JSON.stringify(t)):{id:0,name:'',config:JSON.parse(JSON.stringify(defaultConfig.value))};}
+function selectProfile(t?:DT){profile.value=t?JSON.parse(JSON.stringify(t)):{id:0,name:'',config:JSON.parse(JSON.stringify(defaultConfig.value))};profileBaseline.value=JSON.stringify(profile.value);}
 function toggle(tag:string){const i=profile.value.config.findIndex(c=>c.tag===tag);if(i>=0)profile.value.config.splice(i,1);else profile.value.config.push({tag,label:localSpecs.value[tag]?.label||'',local:!!localSpecs.value[tag],required:tag==='000',subfields:[]});}
-async function saveProfile(){await run(async()=>{const {id,...body}=profile.value;profile.value=await api('/types'+(id?'/'+id:''),id?'PUT':'POST',body);types.value=await api('/types');if(editor.value){prepareRecord(editor.value,activeType.value,specs.value);await loadVocabulary();}message.value='Настройки сохранены. Рабочий лист обновлён.';});}
+async function saveProfile(){await run(async()=>{const {id,...body}=profile.value;profile.value=await api('/types'+(id?'/'+id:''),id?'PUT':'POST',body);profileBaseline.value=JSON.stringify(profile.value);types.value=await api('/types');if(editor.value){prepareRecord(editor.value,activeType.value,specs.value);await loadVocabulary();}message.value='Настройки сохранены. Рабочий лист обновлён.';});}
 async function refreshSettings(){await run(async()=>{types.value=await api('/types');selectProfile(types.value.find(t=>t.id===profile.value.id)||types.value[0]);if(editor.value){prepareRecord(editor.value,activeType.value,specs.value);await loadVocabulary();}});}
 function configChanged(event:Event){const id=Number((event.target as HTMLSelectElement).value);selectProfile(types.value.find(t=>t.id===id));}
 function fillOperator(){
@@ -143,7 +155,7 @@ function fillOperator(){
   if(index===0)f.subfields.push({code:'b',value:currentUser.value.display_name});
  }
 }
-function startRecord(){recordReturnPage.value='catalog';if(pendingRecord.value){error.value='Сначала восстановите незавершённое сохранение записи.';return;}recordTab.value='description';creationKey.value=crypto.randomUUID();editor.value={type_id:types.value[0]?.id||0,marc:{leader:'00000nam a2200000   4500',fields:[]}};prepareRecord(editor.value,activeType.value,specs.value);fillOperator();baseline.value=JSON.stringify(cleanRecord(editor.value));expanded.value.clear();rawOpen.value=false;codedOpen.value=false;gostPreview.value=null;gostKind.value='single';page.value='catalog';error.value='';message.value='';}
+function initializeRecord(){if(pendingRecord.value){error.value='Сначала восстановите незавершённое сохранение записи.';return;}recordTab.value='description';creationKey.value=crypto.randomUUID();editor.value={type_id:types.value[0]?.id||0,marc:{leader:'00000nam a2200000   4500',fields:[]}};prepareRecord(editor.value,activeType.value,specs.value);fillOperator();baseline.value=JSON.stringify(cleanRecord(editor.value));expanded.value.clear();rawOpen.value=false;codedOpen.value=false;gostPreview.value=null;gostKind.value='single';error.value='';message.value='';}
 function applyIsbn(rows:IsbnRow[],selected:boolean[]){
  if(!editor.value||editor.value.id)return;
  insertIsbn(rows,editor.value.marc.fields,selected,tag=>makeField(specs.value[tag],activeType.value?.config.find(c=>c.tag===tag)||{tag,label:'',required:false,subfields:[]}));
@@ -160,10 +172,10 @@ function applyPhotos(selections:PhotoSelection[]){
   message.value='Выбранные сведения вставлены в форму. Проверьте их и сохраните запись.';
  }catch(e){error.value=e instanceof Error?e.message:String(e);}
 }
-async function edit(r:RecordData){await run(async()=>{recordTab.value='description';editor.value=await api('/records/'+r.id);prepareRecord(editor.value!,activeType.value,specs.value);baseline.value=JSON.stringify(cleanRecord(editor.value!));expanded.value.clear();rawOpen.value=false;codedOpen.value=false;gostPreview.value=null;gostKind.value=activeType.value?.name==='Научная статья'?'component':'single';});}
+async function loadRecord(r:RecordData){const path=route.fullPath,wasBusy=busy.value;busy.value=true;error.value='';try{const loaded=await api('/records/'+r.id);if(route.fullPath!==path||!connected.value)return;recordTab.value='description';editor.value=loaded;prepareRecord(editor.value!,activeType.value,specs.value);baseline.value=JSON.stringify(cleanRecord(editor.value!));expanded.value.clear();rawOpen.value=false;codedOpen.value=false;gostPreview.value=null;gostKind.value=activeType.value?.name==='Научная статья'?'component':'single';}catch(e){error.value=String(e);}finally{busy.value=wasBusy;}}
 function changeType(){gostPreview.value=null;gostKind.value=activeType.value?.name==='Научная статья'?'component':'single';if(editor.value){prepareRecord(editor.value,activeType.value,specs.value);}}
-function openCatalog(){recordReturnPage.value='catalog';page.value='catalog';closeEditor();if(connected.value)run(search);}
-function closeEditor(){if(dirty.value){confirmClose.value=true;return;}finishCloseEditor();}
+function openCatalog(){page.value='catalog';}
+function closeEditor(){if(window.history.state?.back===recordOrigin.value)router.back();else void router.push(recordOrigin.value);}
 async function saveRecord(){if(!can('catalog.edit'))return;await run(async()=>{if(!editor.value)return;if(pendingRecord.value){throw Error('Восстановите незавершённое сохранение кнопкой выше. Повтор будет отправлен с исходными данными.');}const {id,...body}=cleanRecord(editor.value);if(id){await acceptSaved(await api('/records/'+id,'PUT',body));}else{await postNewRecord({...body,request_key:creationKey.value,initial_acquisition:null});}});}
 
 async function deleteRecord(){if(!deleteTarget.value?.id||busy.value)return;const target=deleteTarget.value;await run(async()=>{await api('/records/'+target.id+'?version='+target.version,'DELETE');if(editor.value?.id===target.id){finishCloseEditor();}deleteTarget.value=null;if(records.value.length===1&&records.value[0]?.id===target.id&&offset.value>0)offset.value=Math.max(0,offset.value-50);await search();message.value='Запись №'+target.id+' удалена';});}
@@ -203,18 +215,52 @@ function openRaw(){raw.value=JSON.stringify(cleanRecord(editor.value!).marc,null
 function applyRaw(){try{const data=JSON.parse(raw.value);if(!data||typeof data.leader!=='string'||!Array.isArray(data.fields)||data.fields.some((f:MF)=>!f||typeof f.tag!=='string'||!/^\d{3}$/.test(f.tag)||(f.value!==undefined&&typeof f.value!=='string')||(f.ind1!==undefined&&typeof f.ind1!=='string')||(f.ind2!==undefined&&typeof f.ind2!=='string')||(f.subfields!==undefined&&(!Array.isArray(f.subfields)||f.subfields.some(s=>!s||typeof s.code!=='string'||typeof s.value!=='string')))))throw Error('Проверьте структуру записи: нужны маркер leader и массив полей fields.');editor.value!.marc=data;prepareRecord(editor.value!,activeType.value,specs.value);rawOpen.value=false;error.value='';}catch(e){error.value='Не удалось прочитать запись. '+String(e);}}
 function nextInput(e:KeyboardEvent){if(e.shiftKey||e.ctrlKey||e.metaKey)return;e.preventDefault();const inputs=Array.from(document.querySelectorAll<HTMLInputElement>('.value-input:not([readonly])'));const i=inputs.indexOf(e.target as HTMLInputElement);inputs[i+1]?.focus();}
 function dismiss(){menu.value=null;}
-function onKey(e:KeyboardEvent){if(e.key==='Escape'){menu.value=null;rawOpen.value=false;confirmClose.value=false;}if((e.ctrlKey||e.metaKey)&&e.key==='s'&&editor.value&&!document.querySelector('dialog[open]')){e.preventDefault();if(!busy.value&&!rawOpen.value)saveRecord();}}
+function onKey(e:KeyboardEvent){if(e.key==='Escape'){menu.value=null;rawOpen.value=false;}if((e.ctrlKey||e.metaKey)&&e.key==='s'&&editor.value&&!document.querySelector('dialog[open]')){e.preventDefault();if(!busy.value&&!rawOpen.value)saveRecord();}}
 function beforeUnload(e:BeforeUnloadEvent){if(dirty.value){e.preventDefault();e.returnValue='';}}
 onMounted(()=>{restoreSession();window.addEventListener('click',dismiss);window.addEventListener('keydown',onKey);window.addEventListener('resize',dismiss);window.addEventListener('scroll',dismiss,true);window.addEventListener('beforeunload',beforeUnload);});
 onUnmounted(()=>{window.removeEventListener('click',dismiss);window.removeEventListener('keydown',onKey);window.removeEventListener('resize',dismiss);window.removeEventListener('scroll',dismiss,true);window.removeEventListener('beforeunload',beforeUnload);});
+
+function startRecord(){if(pendingRecord.value){error.value='Сначала восстановите незавершённое сохранение записи.';return;}recordOrigin.value=route.fullPath;void router.push({name:'catalog',query:{record:'new'},state:{recordOrigin:recordOrigin.value}});}
+async function edit(r:RecordData){recordOrigin.value=route.fullPath;await router.push({name:'catalog',query:{record:r.id},state:{recordOrigin:recordOrigin.value}});}
+function recordSection(tab:string){void router.push({name:'catalog',query:{...route.query,tab},state:{recordOrigin:recordOrigin.value}});}
+const catalogNavigation=usePageRoute('catalog',async query=>{
+ if(!connected.value||!can('catalog.view'))return;
+ const origin=window.history.state?.recordOrigin;if(typeof origin==='string'&&origin.startsWith('/')&&!origin.startsWith('//'))recordOrigin.value=origin;
+ const id=routeId(query,'record'),creating=routeText(query,'record')==='new';
+ if(creating){if(!can('catalog.edit')){error.value='Нет права создавать записи.';return;}if(!editor.value||editor.value.id)initializeRecord();}
+ else if(id){if(editor.value?.id!==id){editor.value=null;await loadRecord({id} as RecordData);}}
+ else {editor.value=null;const next=routeId(query,'offset');if(offset.value!==next){offset.value=next;await search();}}
+ recordTab.value=routeTab(query,['description','holdings'],'description');
+});
+useNavigationGuard('catalog',()=>dirty.value||rawOpen.value,()=>busy.value,(to,from)=>to.record===from.record);
+useNavigationGuard('types',()=>JSON.stringify(profile.value)!==profileBaseline.value,()=>busy.value);
+const removeAccessGuard=router.beforeEach(to=>{
+ if(!connected.value||to.name==='not-found')return;
+ const name=String(to.name);
+ if(!allowedSection(name,can,currentUser.value?.role==='admin')){
+  const fallback=firstSection(can,currentUser.value?.role==='admin');
+  if(name===fallback)return;
+  error.value='Нет доступа к этому разделу.';return {name:fallback,replace:true};
+ }
+});
+watch(()=>route.fullPath,()=>{
+ if(['attention','types','reference'].includes(page.value))moduleOpen.value=true;
+ if(['statistics','book-fund','attendance','circulation-statistics'].includes(page.value))statisticsOpen.value=true;
+ if(page.value!=='catalog'){editor.value=null;rawOpen.value=false;}
+ document.title=(sections[page.value]?.title||'Библиотека')+' · UTBLib';
+});
+onUnmounted(removeAccessGuard);
+
 </script>
 <template>
 <div class="app-shell">
 <aside v-if="connected" class="sidebar"><div class="brand"><span class="brand-icon">Б</span><div>Библиотека<small>Рабочее место библиотекаря</small></div></div><div class="nav-caption">МОДУЛИ БИБЛИОТЕКИ</div><nav class="module-nav" aria-label="Основная навигация"><div v-if="can('catalog.view')" class="module-nav-row"><button class="module-link" :class="{active:page==='catalog'}" @click="openCatalog" aria-label="Каталогизация и классификация"><span class="module-icon" aria-hidden="true">▤</span><span class="module-label">Каталогизация<br><span class="module-second">и классификация</span></span></button><button class="module-expand" :aria-expanded="moduleOpen" aria-controls="catalog-submenu" :aria-label="moduleOpen?'Скрыть подразделы каталогизации':'Показать подразделы каталогизации'" @click="moduleOpen=!moduleOpen">{{moduleOpen?'▾':'▸'}}</button></div><div v-if="can('catalog.view')" v-show="moduleOpen" id="catalog-submenu" class="module-submenu"><button :class="{active:page==='attention'}" @click="openAttention">⚑ <span>Требует внимания</span></button><button v-if="can('settings.edit')" :class="{active:page==='types'}" @click="page='types'">☷ <span>Настройка ввода</span></button><button :class="{active:page==='reference'}" @click="page='reference'">▧ <span>Справочник полей</span></button></div><button v-if="can('acquisitions.view')" class="module-link" :class="{active:page==='acquisitions'}" @click="page='acquisitions'" aria-label="Поступления"><span class="module-icon" aria-hidden="true">↙</span><span class="module-label">Поступления</span></button><button v-if="can('ksu.view')" class="module-link" :class="{active:page==='ksu'}" @click="page='ksu'" aria-label="КСУ"><span class="module-icon" aria-hidden="true">▦</span><span class="module-label">КСУ</span></button><button v-if="can('withdrawals.view')" class="module-link" :class="{active:page==='withdrawals'}" @click="page='withdrawals'" aria-label="Списание"><span class="module-icon" aria-hidden="true">↗</span><span class="module-label">Списание</span></button><button v-if="can('circulation.issue')||can('circulation.return')||can('circulation.view_any_history')||can('circulation.view_own_history')||can('loans.view_own')||can('reservations.manage')||can('fines.manage')||can('incidents.manage')||can('circulation.settings')" class="module-link" :class="{active:page==='circulation'}" @click="page='circulation'"><span class="module-icon">⇄</span><span class="module-label">Книговыдача</span></button><button v-if="can('readers.registry.view')" class="module-link" :class="{active:page==='readers'}" @click="page='readers'"><span class="module-icon">♙</span><span class="module-label">Читатели</span></button><button v-if="can('events.view')" class="module-link" :class="{active:page==='events'}" @click="page='events'"><span class="module-icon" aria-hidden="true">▦</span><span class="module-label">Мероприятия</span></button><button v-if="can('visits.record')||can('visits.view')" class="module-link" :class="{active:page==='visits'}" @click="visitCode='';page='visits'"><span class="module-icon">↪</span><span class="module-label">Посещения</span></button><div v-if="can('statistics.view')||can('visits.view')"><div class="module-nav-row"><button class="module-link" :class="{active:page==='statistics'||page==='book-fund'||page==='attendance'||page==='circulation-statistics'}" @click="page=can('statistics.view')?'statistics':'attendance';statisticsOpen=true"><span class="module-icon">▥</span><span class="module-label">Статистика</span></button><button class="module-expand" :aria-expanded="statisticsOpen" aria-controls="statistics-submenu" aria-label="Подразделы статистики" @click="statisticsOpen=!statisticsOpen">{{statisticsOpen?'▾':'▸'}}</button></div><div v-show="statisticsOpen" id="statistics-submenu" class="module-submenu"><button v-if="can('statistics.view')" :class="{active:page==='statistics'}" @click="page='statistics'" aria-label="Работа сотрудников"><span aria-hidden="true">▥</span><span>Работа сотрудников</span></button><button v-if="can('statistics.view')" :class="{active:page==='book-fund'}" @click="page='book-fund'" aria-label="Книжный фонд"><span aria-hidden="true">▤</span><span>Книжный фонд</span></button><button v-if="can('statistics.view')" :class="{active:page==='circulation-statistics'}" @click="page='circulation-statistics'">⇄ <span>Книговыдача</span></button><button v-if="can('visits.view')" :class="{active:page==='attendance'}" @click="openAttendance"><span aria-hidden="true">↪</span><span>Отчёт по посещаемости</span></button></div></div><button v-if="can('site.manage')" class="module-link" :class="{active:page==='site'}" @click="page='site'"><span class="module-icon">◎</span><span class="module-label">Сайт</span></button><button v-if="currentUser?.role==='admin'" class="module-link" :class="{active:page==='users'}" @click="page='users'" aria-label="Пользователи и права"><span class="module-icon" aria-hidden="true">⚙</span><span class="module-label">Пользователи и права</span></button></nav><div class="sidebar-bottom"><span class="online-dot"></span> Локальный каталог<small>Библиографический формат MARC21</small></div></aside>
 <div class="workspace" :style="!connected?{marginLeft:0}:{}"><header class="topbar"><span>Библиотека <span class="crumb">/</span> {{page==='site'?'Сайт библиотеки':page==='attention'?'Требует внимания':page==='circulation'?'Книговыдача':page==='readers'?'Читатели':page==='events'?'Мероприятия':page==='visits'?'Посещения':page==='circulation-statistics'?'Статистика · Книговыдача':page==='statistics'?'Статистика · Работа сотрудников':page==='book-fund'?'Статистика · Книжный фонд':page==='attendance'?'Статистика · Посещаемость':page==='ksu'?'КСУ · Поступления':page==='users'?'Пользователи и права':page==='withdrawals'?'Списание':page==='acquisitions'?'Поступления':'Каталогизация и классификация'}}</span><div v-if="connected" class="user-chip"><span>{{currentUser.display_name}} · {{currentUser.role==='admin'?'Администратор':currentUser.role==='viewer'?'Наблюдатель':currentUser.role==='reader'?'Читатель':currentUser.role==='manager'?'Руководитель':'Библиотекарь'}}</span><AccountMenu :api="api" @changed="signedOut" /><button :disabled="busy" @click="logout">Выйти</button></div></header>
 <main>
+<div v-if="connected" class="workspace-history"><button type="button" :disabled="!canGoBack||busy" @click="goBack" aria-label="Назад к предыдущей странице">← Назад</button></div>
 <form v-if="!connected" class="login card" @submit.prevent="login"><div class="eyebrow">ДОБРО ПОЖАЛОВАТЬ</div><h1>Ваш библиотечный каталог</h1><p>Создавайте описания документов и настраивайте рабочие листы для каждого типа.</p><label>Логин<input v-model="username" autocomplete="username" required maxlength="80" autofocus></label><label>Пароль<input v-model="password" type="password" autocomplete="current-password" required maxlength="256"></label><button class="primary" :disabled="busy">Войти в каталог →</button></form>
 <template v-else>
+<section v-if="page==='not-found'||page==='unavailable'" class="card"><h1>{{page==='not-found'?'Страница не найдена':'Нет доступных разделов'}}</h1><p>Выберите доступный раздел в меню или вернитесь назад.</p></section>
 <div v-if="pendingRecord&&can('catalog.edit')" class="pending-note"><strong>Незавершённое сохранение новой записи</strong><p>Восстановите результат исходной операции. Повторный запрос не создаст ещё одну запись или экземпляры.</p><button :disabled="busy" @click="recoverRecord">Проверить и восстановить запись</button></div>
 <CatalogAttention v-if="page==='attention'&&can('catalog.view')" :api="api" :types="types" @record="openAttentionRecord" />
 <section v-if="page==='catalog'&&!editor">
@@ -224,8 +270,8 @@ onUnmounted(()=>{window.removeEventListener('click',dismiss);window.removeEventL
 <div class="card table-wrap"><div class="table-footer" role="navigation" aria-label="Страницы каталога сверху"><span>Страница {{Math.floor(offset/50)+1}}</span><div><button :disabled="offset===0||busy" @click="changeCatalogPage(-50)">← Назад</button><button :disabled="records.length<50||busy" @click="changeCatalogPage(50)">Далее →</button></div></div><table class="catalog-table"><thead><tr><th>Документ</th><th>Автор</th><th>Тип документа</th><th>УДК</th><th><span class="sr-only">Действия</span></th></tr></thead><tbody><tr v-for="r in records" :key="r.id"><td><button class="record-title" @click="edit(r)"><span class="document-icon">▤</span>{{title(r)}}</button></td><td>{{author(r)}}</td><td><span class="pill">{{types.find(t=>t.id===r.type_id)?.name}}</span></td><td class="muted">{{udc(r)}}</td><td><div class="catalog-row-actions"><CopyDescription :record-id="r.id!" :api="api" /><button v-if="can('catalog.delete')" class="danger-link" :disabled="busy" :aria-label="'Удалить запись №'+r.id" @click="deleteTarget=r">Удалить</button></div></td></tr></tbody></table><div class="empty" v-if="!records.length"><span>▤</span><h2>{{hasSearch?'Записи не найдены':'Здесь появятся ваши записи'}}</h2><p>{{hasSearch?'Измените условия поиска или сбросьте фильтры.':'Создайте описание документа или измените условия поиска.'}}</p><button v-if="can('catalog.edit')" @click="startRecord">Создать первую запись</button></div><div class="table-footer"><span>{{records.length?'Показаны записи '+(offset+1)+'–'+(offset+records.length):'Нет записей'}}</span><div><button :disabled="offset===0||busy" @click="changeCatalogPage(-50)">← Назад</button><button :disabled="records.length<50||busy" @click="changeCatalogPage(50)">Далее →</button></div></div></div>
 </section>
 <section v-if="page==='catalog'&&editor" class="editor">
-<div class="page-heading"><div><button class="back-link" @click="closeEditor">{{recordReturnPage==='attention'?'← К записям, требующим внимания':'← К списку записей'}}</button><h1>{{editor.id?'Редактирование записи':'Новая запись'}}</h1><p>{{editor.id?'Запись № '+editor.id+' · ':''}}<span :class="{'unsaved':dirty}">{{dirty?'Есть несохранённые изменения':'Рабочий лист готов к заполнению'}}</span></p></div><div class="record-actions"><BookPhotos v-if="!rawOpen&&can('catalog.edit')" :key="String(editor.id||'new')+':'+editor.type_id" :api="api" :fields="editor.marc.fields" :type-id="editor.type_id" :record-id="editor.id" @insert="applyPhotos" /><CopyDescription :key="editor.id||'new'" :record-id="editor.id" :marc="cleanRecord(editor).marc" :kind="gostKind" :api="api" :disabled="busy||rawOpen" label="Копировать библ. запись" /><IsbnLookup v-if="!editor.id&&!rawOpen&&can('catalog.edit')" :api="api" :fields="editor.marc.fields" @insert="applyIsbn" /><button v-if="editor.id&&can('catalog.delete')" class="danger-link" :disabled="busy" @click="deleteTarget=editor">Удалить запись</button><button v-if="can('catalog.edit')" class="primary" :disabled="busy||rawOpen" @click="saveRecord">✓ Сохранить запись</button></div></div>
-<div v-if="editor.id" class="record-tabs"><button :class="{active:recordTab==='description'}" @click="recordTab='description'">Описание документа</button><button :class="{active:recordTab==='holdings'}" @click="recordTab='holdings'">Экземпляры</button></div>
+<div class="page-heading"><div><button class="back-link" @click="closeEditor">← Вернуться к списку</button><h1>{{editor.id?'Редактирование записи':'Новая запись'}}</h1><p>{{editor.id?'Запись № '+editor.id+' · ':''}}<span :class="{'unsaved':dirty}">{{dirty?'Есть несохранённые изменения':'Рабочий лист готов к заполнению'}}</span></p></div><div class="record-actions"><BookPhotos v-if="!rawOpen&&can('catalog.edit')" :key="String(editor.id||'new')+':'+editor.type_id" :api="api" :fields="editor.marc.fields" :type-id="editor.type_id" :record-id="editor.id" @insert="applyPhotos" /><CopyDescription :key="editor.id||'new'" :record-id="editor.id" :marc="cleanRecord(editor).marc" :kind="gostKind" :api="api" :disabled="busy||rawOpen" label="Копировать библ. запись" /><IsbnLookup v-if="!editor.id&&!rawOpen&&can('catalog.edit')" :api="api" :fields="editor.marc.fields" @insert="applyIsbn" /><button v-if="editor.id&&can('catalog.delete')" class="danger-link" :disabled="busy" @click="deleteTarget=editor">Удалить запись</button><button v-if="can('catalog.edit')" class="primary" :disabled="busy||rawOpen" @click="saveRecord">✓ Сохранить запись</button></div></div>
+<div v-if="editor.id" class="record-tabs"><button :class="{active:recordTab==='description'}" @click="recordSection('description')">Описание документа</button><button :class="{active:recordTab==='holdings'}" @click="recordSection('holdings')">Экземпляры</button></div>
 <HoldingsPanel v-if="editor.id&&recordTab==='holdings'" :canEdit="can('copies.edit')" :recordId="editor.id" :title="title(editor)" :api="api" />
 <section v-if="!can('catalog.edit')&&recordTab==='description'" class="card table-wrap"><p class="profile-note">Режим просмотра</p><PrimarySpecialties :record="editor" readonly /><table><thead><tr><th>Код</th><th>Поле</th><th>Значение</th></tr></thead><tbody><template v-for="f in cleanRecord(editor).marc.fields"><tr v-if="f.value!==undefined"><td>{{f.tag}}</td><td>{{fieldLabel(f.tag)}}</td><td>{{f.value}}</td></tr><tr v-for="s in f.subfields"><td>{{f.tag}}${{s.code}}</td><td>{{sfLabel(f,s)}}</td><td>{{s.value}}</td></tr></template></tbody></table></section>
 <fieldset class="plain-fieldset" v-show="recordTab==='description'&&can('catalog.edit')" :disabled="!can('catalog.edit')"><p v-if="!can('catalog.edit')">Режим просмотра. Изменение описания недоступно.</p>
@@ -254,8 +300,8 @@ onUnmounted(()=>{window.removeEventListener('click',dismiss);window.removeEventL
 </section>
 <UsersPage v-if="page==='users'&&currentUser.role==='admin'" :api="api" :currentId="currentUser.id" @selfChanged="signedOut" />
 <WithdrawalsPage v-if="page==='withdrawals'&&can('withdrawals.view')" :canCreate="can('withdrawals.create')" :api="api" />
-<CirculationPage :initial-reader-id="issueReaderId" @reader-consumed="issueReaderId=null" @reader="openReader" v-if="page==='circulation'" :api="api" :can="can" />
-<ReadersPage v-if="page==='readers'&&can('readers.registry.view')" ref="readersPage" :api="api" :can="can" :is-admin="currentUser.role==='admin'" @visit="openVisit" @issue="openReaderIssue" />
+<CirculationPage @reader="openReader" v-if="page==='circulation'" :api="api" :can="can" />
+<ReadersPage v-if="page==='readers'&&can('readers.registry.view')" :api="api" :can="can" :is-admin="currentUser.role==='admin'" @visit="openVisit" @issue="openReaderIssue" />
 <SiteContentPage v-if="page==='site'&&can('site.manage')" :api="api" :csrf="csrf" />
 <EventsPage v-if="page==='events'&&can('events.view')" :api="api" :can="can" @reader="openReader" /><VisitsPage v-if="page==='visits'&&(can('visits.record')||can('visits.view'))" :api="api" :can="can" :initial-code="visitCode" @reader="openReader" @report="openAttendance" />
 <StatisticsPage v-if="page==='statistics'&&can('statistics.view')" :api="api" @record="openKsuRecord" />
@@ -263,7 +309,7 @@ onUnmounted(()=>{window.removeEventListener('click',dismiss);window.removeEventL
 <BookFundPage v-if="page==='book-fund'&&can('statistics.view')" :api="api" />
 <CirculationStatistics v-if="page==='circulation-statistics'&&can('statistics.view')" :api="api" :can="can" @record="openKsuRecord" />
 <KsuPage v-if="page==='ksu'&&can('ksu.view')" :canEdit="can('ksu.edit')" :api="api" @record="openKsuRecord" @receipt="openKsuReceipt" />
-<AcquisitionsPage ref="acquisitionsPage" v-if="page==='acquisitions'&&can('acquisitions.view')" :canEdit="can('acquisitions.edit')" :canCancel="can('acquisitions.cancel')" :api="api" />
+<AcquisitionsPage v-if="page==='acquisitions'&&can('acquisitions.view')" :canEdit="can('acquisitions.edit')" :canCancel="can('acquisitions.cancel')" :api="api" />
 <section v-if="page==='types'&&can('settings.edit')">
 <div class="page-heading"><div><div class="eyebrow">РАБОЧИЕ ЛИСТЫ</div><h1>Настройка ввода</h1><p>Какие строки видит каталогизатор и в каком порядке их заполняет.</p></div><button class="primary" :disabled="busy||!profile.name.trim()" @click="saveProfile">Сохранить настройки</button></div>
 <SettingsTransfer :api="api" @imported="refreshSettings" />
@@ -277,10 +323,10 @@ onUnmounted(()=>{window.removeEventListener('click',dismiss);window.removeEventL
 </main></div></div>
 <div v-if="menu" class="context-menu" role="menu" :style="{left:menu.x+'px',top:menu.y+'px'}" @click.stop><div class="menu-title">{{menu.field.tag}}{{menu.sub?'$'+menu.sub.code:''}} · {{menu.sub?'Подполе':'Поле'}}</div><button role="menuitem" :disabled="!canRepeat()" @click="duplicate">⧉ Дублировать {{menu.sub?'подполе':'поле'}}<small v-if="!canRepeat()">Повторение не допускается</small></button><button v-if="repeatablePrimary()" role="menuitem" @click="duplicatePrimary">⧉ Дублировать значение ${{repeatablePrimary()!.code}}</button><button role="menuitem" :disabled="!canRemove()" @click="remove">× Удалить {{menu.sub?'подполе':'поле'}}<small v-if="!canRemove()">Обязательная строка</small></button><button v-if="!menu.sub" role="menuitem" @click="toggleDetails(menu.field);menu=null">☷ Подполя и уточнения</button></div>
 <div v-if="rawOpen" class="modal-backdrop"><section class="modal card" role="dialog" aria-modal="true" aria-label="Полная запись"><h2>Полная запись</h2><p>Служебный режим: все поля, включая скрытые и локальные.</p><textarea v-model="raw" rows="18" aria-label="Полная MARC запись"></textarea><div class="modal-actions"><button @click="rawOpen=false">Отмена</button><button class="primary" @click="applyRaw">Применить к рабочему листу</button></div></section></div>
-<div v-if="confirmClose" class="modal-backdrop"><section class="modal small card" role="dialog" aria-modal="true" aria-label="Несохранённые изменения"><h2>Сохранить изменения?</h2><p>В рабочем листе остались несохранённые данные.</p><div class="modal-actions"><button @click="confirmClose=false">Продолжить ввод</button><button @click="finishCloseEditor">Закрыть без сохранения</button><button class="primary" :disabled="busy" @click="saveRecord().then(()=>{if(!error){finishCloseEditor();}})">Сохранить</button></div></section></div>
 <dialog ref="deleteDialog" class="modal small card record-delete-dialog" aria-labelledby="delete-title" @cancel="busy?$event.preventDefault():deleteTarget=null" @close="deleteTarget=null"><template v-if="deleteTarget"><h2 id="delete-title">Удалить запись из каталога?</h2><p><strong>{{title(deleteTarget)}}</strong><br>Запись №{{deleteTarget.id}}</p><p>Удаление необратимо. Тип документа и справочники останутся. Несохранённые изменения этой записи будут потеряны.</p><p v-if="error" role="alert" class="delete-error">{{error}}</p><div class="modal-actions"><button autofocus :disabled="busy" @click="deleteTarget=null">Отмена</button><button class="danger-button" :disabled="busy" @click="deleteRecord">Удалить запись</button></div></template></dialog>
 </template>
 
 <style scoped>
+.workspace-history{margin-bottom:16px}.workspace-history button{font-size:13px;padding:7px 12px}
 .catalog-search-form{display:block}.catalog-search-basic{display:flex;align-items:center;gap:12px}.catalog-search-basic>input:first-child{flex:2;min-width:200px}.catalog-search-basic>input{flex:1;min-width:130px}.catalog-search-basic>select{max-width:220px;min-width:140px}.catalog-search-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px}.catalog-search-actions button{font-size:12px}.catalog-search-actions small{color:#6f8194;font-size:12px}@media(max-width:1100px){.catalog-search-basic{flex-wrap:wrap}.catalog-search-basic>input:first-child{flex-basis:100%}}@media(max-width:780px){.catalog-search-basic>input,.catalog-search-basic>select{min-width:0;max-width:100%;width:100%;flex-basis:100%}}
 </style>

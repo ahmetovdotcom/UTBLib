@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {renderTask} from './navigation';
 import {computed, nextTick, onMounted, ref, watch} from 'vue';
 import {authStorage} from './authStorage';
 import type {DT} from './catalog';
@@ -55,7 +56,7 @@ async function load(start=0){
 }
 async function changePage(delta:number){await load(Math.max(0,offset.value+delta));await nextTick();document.getElementById('attention-results')?.scrollIntoView({block:'start'});}
 function open(id:number){remember();emit('record',id);}
-onMounted(async()=>{
+onMounted(()=>renderTask((async()=>{
  try{
   const saved=JSON.parse(authStorage.getItem(storageKey)||'null');
   if(saved){
@@ -68,7 +69,7 @@ onMounted(async()=>{
  }catch{/* Ignore an outdated or invalid saved filter. */}
  await loadOptions();ready.value=true;
  if(selected.value.length&&checks.value.length&&!error.value)await load(offset.value);
-});
+})()));
 </script>
 
 <template>

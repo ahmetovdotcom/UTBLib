@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {computed,nextTick,onMounted,ref} from 'vue';
+import {usePageRoute,usePageMemory,useNavigationGuard,routeId,routeTab,routeText} from './navigation';
 import AttendancePage from './AttendancePage.vue';
 import VisitQrPoints from './VisitQrPoints.vue';
 const props=defineProps<{api:(path:string,method?:string,body?:any)=>Promise<any>;can:(permission:string)=>boolean}>();
@@ -16,7 +17,7 @@ async function load(reset=false){
  try{const q=query();q.set('offset',String(offset.value));const r=await props.api('/events?'+q);items.value=r.items;total.value=r.total;participants.value=r.participants;}catch(e){error.value=String(e);}finally{busy.value=false;}
 }
 async function loadOptions(){const r=await props.api('/events/options');branches.value=r.branches;formats.value=r.formats;statuses.value=r.statuses;}
-async function open(item:any){error.value='';receipt.value=null;try{selected.value=await props.api('/events/'+item.id);reportVersion.value++;window.scrollTo(0,0);}catch(e){error.value=String(e);}}
+async function open(item:any,restoring=false){if(!restoring&&navigation.go({event:item.id}))return;error.value='';receipt.value=null;try{selected.value=await props.api('/events/'+item.id);reportVersion.value++;window.scrollTo(0,0);}catch(e){error.value=String(e);}}
 async function edit(item?:any){
  formError.value='';error.value='';
  try{editor.value=item?await props.api('/events/'+item.id):{title:'',date_from:today(),date_to:today(),format:'',branch_id:branches.value.find(b=>b.active)?.id||null,location:'',responsible:'',coorganizers:'',protocol:false,protocol_url:'',instagram_url:'',notes:'',status:'planned'};await nextTick();dialog.value?.showModal();}catch(e){error.value=String(e);}
@@ -26,11 +27,11 @@ async function save(){
  if(!editor.value||saving.value)return;saving.value=true;formError.value='';
  const fields=['title','date_from','date_to','format','branch_id','location','responsible','coorganizers','protocol','protocol_url','instagram_url','notes','status'];
  const body=Object.fromEntries(fields.map(k=>[k,editor.value[k]]));const id=editor.value.id;if(id)body.version=editor.value.version;
- try{const r=await props.api('/events'+(id?'/'+id:''),id?'PUT':'POST',body);if(!id||selected.value?.id===id){selected.value=r;reportVersion.value++;}dialog.value?.close();editor.value=null;await load();await loadOptions();}catch(e){formError.value=String(e);}finally{saving.value=false;}
+ try{const r=await props.api('/events'+(id?'/'+id:''),id?'PUT':'POST',body);if(!id||selected.value?.id===id){selected.value=r;reportVersion.value++;}dialog.value?.close();editor.value=null;if(selected.value)navigation.go({event:selected.value.id},true);await load();await loadOptions();}catch(e){formError.value=String(e);}finally{saving.value=false;}
 }
 async function remove(item:any){
  if(!confirm('Удалить мероприятие «'+item.title+'»? Оно исчезнет из списка, QR перестанет работать. Сохранённые отметки останутся в истории базы.'))return;
- error.value='';try{await props.api('/events/'+item.id+'?version='+item.version,'DELETE');if(selected.value?.id===item.id)selected.value=null;await load();}catch(e){error.value=String(e);}
+ error.value='';try{await props.api('/events/'+item.id+'?version='+item.version,'DELETE');if(selected.value?.id===item.id){selected.value=null;navigation.go({},true);}await load();}catch(e){error.value=String(e);}
 }
 async function scan(){
  if(scanBusy.value)return;scanBusy.value=true;error.value='';receipt.value=null;
@@ -42,13 +43,17 @@ async function download(){
 const groups=computed(()=>{const result:{key:string;label:string;items:any[]}[]=[];for(const item of items.value){const key=item.date_from.slice(0,7);let g=result.find(g=>g.key===key);if(!g){g={key,label:new Date(key+'-01T12:00:00Z').toLocaleDateString('ru-RU',{month:'long',year:'numeric'}),items:[]};result.push(g);}g.items.push(item);}return result;});
 const day=(s:string)=>s.split('-').reverse().join('.');
 function page(delta:number){offset.value+=delta;load();window.scrollTo(0,0);}
-onMounted(async()=>{try{await loadOptions();await load();}catch(e){error.value=String(e);}});
+usePageMemory('events',{filters,applied,offset});
+const navigation=usePageRoute('events',async q=>{dialog.value?.close();editor.value=null;const id=routeId(q,'event');if(id){if(selected.value?.id!==id)await open({id},true);}else selected.value=null;},async()=>{try{await loadOptions();await load();}catch(e){error.value=String(e);}});
+useNavigationGuard('events',()=>!!editor.value,()=>saving.value||scanBusy.value);
+function backToEvents(){if(navigation.go())return;selected.value=null;void load();}
+
 </script>
 <template>
 <section class="events-page">
  <header class="page-heading">
   <div><h1>{{selected?selected.title:'Мероприятия'}}</h1><p>{{selected?'Карточка мероприятия и отдельный учёт участников.':'План мероприятий, ответственные и посещаемость. У каждого мероприятия — свой QR-код.'}}</p></div>
-  <div class="actions" v-if="selected"><button @click="selected=null;load()">← К списку</button><button v-if="can('events.manage')" @click="edit(selected)">Редактировать</button><VisitQrPoints v-if="can('events.manage')" :key="selected.id" :api="api" :branches="branches" :event-id="selected.id" /></div>
+  <div class="actions" v-if="selected"><button @click="backToEvents">← К списку</button><button v-if="can('events.manage')" @click="edit(selected)">Редактировать</button><VisitQrPoints v-if="can('events.manage')" :key="selected.id" :api="api" :branches="branches" :event-id="selected.id" /></div>
   <div class="actions" v-else><button :disabled="busy||exporting" @click="download">↓ Excel</button><button v-if="can('events.manage')" class="primary" @click="edit()">＋ Создать мероприятие</button></div>
  </header>
  <p v-if="error" class="error" role="alert">{{error}}</p>

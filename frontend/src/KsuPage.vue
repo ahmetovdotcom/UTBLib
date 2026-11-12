@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import './ksuTables.css';
+import {usePageRoute,usePageMemory,useNavigationGuard,routeId,routeTab,routeText} from './navigation';
+
 import {computed,onMounted,ref,nextTick} from 'vue';
 import KsuEntryForm from './KsuEntryForm.vue';
 import KsuTableView from './KsuTableView.vue';
@@ -24,17 +26,28 @@ async function download(){await run(async()=>{const r=await fetch('/api/ksu/expo
 const editing=ref<any>(null),members=ref<any>(null),membersDialog=ref<HTMLDialogElement|null>(null),memberOffset=ref(0),entryHistory=ref<any[]>([]);
 function createEntry(){editing.value={number:report.value.next_number,year:year.value,registered_on:new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Almaty',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),document_on:'',source:'',invoice:'',note:''};}
 async function savedEntry(saved:any){const selectedYear=saved.year;editing.value=null;year.value=selectedYear;await run(async()=>{await refresh();message.value='КСУ сохранена. Теперь её можно выбрать в экземплярах каталога.';});}
-async function viewMembers(r:any,offset=0){await run(async()=>{members.value=await props.api('/ksu/entries/'+r.id+'/copies?offset='+offset);memberOffset.value=offset;entryHistory.value=[];await nextTick();if(!membersDialog.value?.open)membersDialog.value?.showModal();});}
-function openRecord(id:number){membersDialog.value?.close();emit('record',id);}
+async function viewMembers(r:any,offset=0,restoring=false){if(!restoring&&navigation.go({tab:tab.value,year:year.value,entry:r.id,offset:offset||undefined}))return;await run(async()=>{members.value=await props.api('/ksu/entries/'+r.id+'/copies?offset='+offset);memberOffset.value=offset;entryHistory.value=[];await nextTick();if(!membersDialog.value?.open)membersDialog.value?.showModal();});}
+function openRecord(id:number){emit('record',id);}
 async function viewHistory(){await run(async()=>{entryHistory.value=await props.api('/ksu/history/'+members.value.entry.id);});}
-onMounted(()=>run(async()=>{options.value=await props.api('/ksu/options');mapping.value=(await props.api('/ksu/rules')).items;await refresh();}));
+usePageMemory('ksu',{year,detail,ruleQuery,rulesOpen});
+const navigation=usePageRoute('ksu',async q=>{
+ editing.value=null;
+ tab.value=routeTab(q,['receipts','specialties'],'receipts');
+ const y=routeId(q,'year');if(y>=1900&&y<=9999)year.value=y;
+ await load();
+ const id=routeId(q,'entry');if(id)await viewMembers({id},routeId(q,'offset'),true);else{membersDialog.value?.close();members.value=null;}
+},()=>run(async()=>{options.value=await props.api('/ksu/options');mapping.value=(await props.api('/ksu/rules')).items;}));
+function changeTab(value:string){if(navigation.go({tab:value,year:year.value}))return;tab.value=value;}
+function closeMembers(){if(navigation.go({tab:tab.value,year:year.value}))return;membersDialog.value?.close();members.value=null;}
+useNavigationGuard('ksu',()=>!!editing.value,()=>busy.value);
+
 </script>
 <template>
-<div class="record-tabs ksu-tabs" role="group" aria-label="Отчёты КСУ"><button :class="{active:tab==='receipts'}" :aria-pressed="tab==='receipts'" @click="tab='receipts'">Поступления · первый лист</button><button :class="{active:tab==='specialties'}" :aria-pressed="tab==='specialties'" @click="tab='specialties'">Поступления по специальностям</button></div>
+<div class="record-tabs ksu-tabs" role="group" aria-label="Отчёты КСУ"><button :class="{active:tab==='receipts'}" :aria-pressed="tab==='receipts'" @click="changeTab('receipts')">Поступления · первый лист</button><button :class="{active:tab==='specialties'}" :aria-pressed="tab==='specialties'" @click="changeTab('specialties')">Поступления по специальностям</button></div>
 <KsuSpecialties v-if="tab==='specialties'" :api="api" @record="emit('record',$event)" @receipt="emit('receipt',$event)" />
 <section v-show="tab==='receipts'" class="ksu-page" :aria-busy="busy">
  <div class="page-heading"><div><div class="eyebrow">УЧЁТ ФОНДА</div><h1>КСУ · Поступления</h1><p>Книга суммарного учёта — первый лист.</p></div><div class="record-actions"><button v-if="canEdit" class="primary" :disabled="busy||!report" @click="createEntry">＋ Создать КСУ</button><button :disabled="busy||!report||!!report.issue_count" @click="download">Скачать Excel</button></div></div>
- <form class="card ksu-toolbar" @submit.prevent="load"><label>Год регистрации<input v-model.number="year" type="number" min="1900" max="9999" required></label><button :disabled="busy">Показать</button></form>
+ <form class="card ksu-toolbar" @submit.prevent="changeTab(tab)"><label>Год регистрации<input v-model.number="year" type="number" min="1900" max="9999" required></label><button :disabled="busy">Показать</button></form>
  <p v-if="error" role="alert" class="inline-error">{{error}}</p><p v-if="message" role="status">{{message}}</p>
  <p class="profile-note">Создайте КСУ с номером и годом, затем выберите её при создании или изменении экземпляра в каталоге. Количество, стоимость, язык, вид литературы и УДК заполняются автоматически. Поступления партиями также продолжают формировать КСУ.</p>
  <p v-if="report?.issue_count" class="pending-note" role="alert">Есть неполные или противоречивые исходные данные. Количество поступивших экземпляров включено полностью, распределение по графам — только по определённым категориям. Выгрузка станет доступна после исправления.</p>
@@ -52,14 +65,14 @@ onMounted(()=>run(async()=>{options.value=await props.api('/ksu/options');mappin
  <section v-if="canEdit&&options" class="card holdings ksu-candidates"><button :aria-expanded="rulesOpen" @click="rulesOpen=!rulesOpen">{{rulesOpen?'Скрыть':'Открыть'}} соответствия кодов литературы</button><div v-if="rulesOpen"><h2>Соответствия 952$a для всей библиотеки</h2><p>Настраиваются один раз. Категория и язык из кода не должны противоречить карточке. Для справочных изданий, брошюр и АВД выберите принятую в вашей библиотеке категорию.</p><input v-model="ruleQuery" aria-label="Поиск кода литературы" placeholder="Код или расшифровка"><div class="table-wrap"><table class="ksu-grid"><thead><tr><th>Код / расшифровка</th><th>Категория первого листа</th><th>Язык</th><th>АВД</th><th></th></tr></thead><tbody><tr v-for="r in filteredRules" :key="r.code"><td>{{r.code}}<small class="block">{{r.label}}</small></td><td><select v-model="r.kind" :aria-label="'Категория '+r.code"><option value="">Не назначена</option><option v-for="(name,key) in options.kinds" :value="key">{{name}}</option></select></td><td><select v-model="r.language" :aria-label="'Язык '+r.code"><option value="">Из 041$a</option><option v-for="(name,key) in options.languages" :value="key">{{name}}</option></select></td><td><select v-model="r.media" :aria-label="'АВД '+r.code"><option v-for="(name,key) in options.media" :value="key">{{name}}</option></select></td><td><button :disabled="busy" @click="saveRule(r)">Сохранить {{r.code}}</button></td></tr></tbody></table></div><form @submit.prevent="saveRule(newRule)" class="acquisition-grid"><label>Новый код<input v-model="newRule.code" required maxlength="120"></label><label>Расшифровка<input v-model="newRule.label" maxlength="255"></label><label>Категория<select v-model="newRule.kind" required><option value="">Выберите</option><option v-for="(name,key) in options.kinds" :value="key">{{name}}</option></select></label><label>Язык<select v-model="newRule.language"><option value="">Из 041$a</option><option v-for="(name,key) in options.languages" :value="key">{{name}}</option></select></label><label>АВД<select v-model="newRule.media"><option v-for="(name,key) in options.media" :value="key">{{name}}</option></select></label><button :disabled="busy">Добавить соответствие</button></form></div></section>
 </section>
 <KsuEntryForm v-if="editing" :entry="editing" :api="api" @close="editing=null" @saved="savedEntry" />
-<dialog ref="membersDialog" class="modal card acquisition-dialog" aria-labelledby="ksu-members-title">
+<dialog @cancel.prevent="closeMembers" ref="membersDialog" class="modal card acquisition-dialog" aria-labelledby="ksu-members-title">
  <template v-if="members"><h2 id="ksu-members-title">КСУ {{members.entry.label}} · Экземпляры</h2><p>{{members.entry.source}} · {{members.entry.invoice||'Без номера документа'}}</p>
  <p v-if="error" class="inline-error" role="alert">{{error}}</p>
  <div class="table-wrap"><table class="ksu-grid"><thead><tr><th>Книга</th><th>Инв. номер</th><th>Цена</th><th>Дата поступления</th><th>Статус учёта</th></tr></thead><tbody><tr v-for="c in members.items" :key="c.id"><td><button @click="openRecord(c.record_id)">{{c.title||'Открыть книгу'}}</button></td><td>{{c.inventory_number}}</td><td>{{c.unit_price===null?'Не указана':c.unit_price+' '+c.currency}}</td><td>{{date(c.received_on)}}</td><td>{{c.status==='withdrawn'?'Списан · сохранён в истории поступлений':'На учёте'}}</td></tr></tbody></table></div>
  <p v-if="!members.total">Экземпляры ещё не добавлены. Откройте книгу в каталоге, создайте или измените экземпляр и выберите эту КСУ.</p>
  <div class="table-footer"><span>Всего: {{members.total}}</span><button :disabled="busy||memberOffset===0" @click="viewMembers(members.entry,memberOffset-50)">Назад</button><button :disabled="busy||memberOffset+members.items.length>=members.total" @click="viewMembers(members.entry,memberOffset+50)">Далее</button></div>
  <button :disabled="busy" @click="viewHistory">История КСУ</button><ul><li v-for="(h,i) in entryHistory" :key="i">{{h.created_at}} · {{h.reason}}<details><summary>Изменения</summary><pre>{{JSON.stringify({до:h.before,после:h.after},null,2)}}</pre></details></li></ul>
- <div class="modal-actions"><button @click="membersDialog?.close()">Закрыть</button></div></template>
+ <div class="modal-actions"><button @click="closeMembers">Закрыть</button></div></template>
 </dialog>
 </template>
 <style scoped>

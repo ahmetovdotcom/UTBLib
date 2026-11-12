@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {usePageRoute,usePageMemory,useNavigationGuard,routeId} from './navigation';
 import {authStorage} from "./authStorage";
 import {onMounted,ref,nextTick} from 'vue';
 import AcquisitionCreate from './AcquisitionCreate.vue';
@@ -15,12 +16,15 @@ async function load(nextOffset=offset.value){
  }catch(e){error.value=e instanceof Error?e.message:String(e);}
  finally{busy.value=false;}
 }
-async function openReceipt(id:number){requestedReceipt.value=props.canEdit?null:id;if(props.canEdit){await creator.value?.openEdit(id);}else{try{receipts.value=[await props.api('/acquisitions/'+id)];total.value=1;offset.value=0;}catch(e){error.value=String(e);}}}
+async function openReceipt(id:number){if(navigation.go({receipt:id}))return;requestedReceipt.value=props.canEdit?null:id;if(props.canEdit){await creator.value?.openEdit(id);}else{try{receipts.value=[await props.api('/acquisitions/'+id)];total.value=1;offset.value=0;}catch(e){error.value=String(e);}}}
 defineExpose({openReceipt});
 async function openCancel(r:any){cancelDraft.value={id:r.id,version:r.version,request_key:crypto.randomUUID(),reason:''};await nextTick();cancelDialog.value?.showModal();}
 async function cancelReceipt(operation:any){if(busy.value)return;busy.value=true;error.value='';pendingCancel.value=operation;authStorage.setItem('pending-receipt-cancel',JSON.stringify(operation));try{const {id,...body}=operation;await props.api('/acquisitions/'+id+'/cancel','POST',body);authStorage.removeItem('pending-receipt-cancel');pendingCancel.value=null;cancelDialog.value?.close();cancelDraft.value=null;}catch(e){if((e as any).status>=400&&(e as any).status<500){authStorage.removeItem('pending-receipt-cancel');pendingCancel.value=null;}error.value=e instanceof Error?e.message:String(e);}finally{busy.value=false;}if(!error.value)await load();}
 async function history(id:number){try{changes.value=await props.api('/acquisitions/'+id+'/history');await nextTick();historyDialog.value?.showModal();}catch(e){error.value=String(e);}}
-onMounted(()=>{try{pendingCancel.value=JSON.parse(authStorage.getItem('pending-receipt-cancel')||'null');}catch{}load();});
+usePageMemory('acquisitions',{offset});
+const navigation=usePageRoute('acquisitions',async q=>{requestedReceipt.value=props.canEdit?null:(routeId(q,'receipt')||null);await load();});
+onMounted(()=>{try{pendingCancel.value=JSON.parse(authStorage.getItem('pending-receipt-cancel')||'null');}catch{}});
+useNavigationGuard('acquisitions',()=>!!cancelDraft.value?.reason,()=>busy.value);
 </script>
 <template>
 <section class="acquisitions-page">
@@ -33,7 +37,7 @@ onMounted(()=>{try{pendingCancel.value=JSON.parse(authStorage.getItem('pending-r
   <p v-if="busy" role="status">Загрузка поступлений…</p>
   <article v-for="r in receipts" :key="r.id" class="receipt-card">
    <h2>Поступление №{{r.id}} · {{r.received_on}}</h2>
-   <p><strong>{{r.status==='cancelled'?'Отменено · исключено из действующих итогов':'Зарегистрировано'}}</strong> · Версия {{r.version}}</p><div class="record-actions"><button v-if="r.status==='posted'&&canEdit" :disabled="busy||!!pendingCancel" @click="creator?.openEdit(r.id)">Изменить поступление</button><button v-if="r.status==='posted'&&canCancel" class="danger-link" :disabled="busy||!!pendingCancel" @click="openCancel(r)">Удалить поступление</button><button @click="history(r.id)">История изменений</button></div>
+   <p><strong>{{r.status==='cancelled'?'Отменено · исключено из действующих итогов':'Зарегистрировано'}}</strong> · Версия {{r.version}}</p><div class="record-actions"><button v-if="r.status==='posted'&&canEdit" :disabled="busy||!!pendingCancel" @click="openReceipt(r.id)">Изменить поступление</button><button v-if="r.status==='posted'&&canCancel" class="danger-link" :disabled="busy||!!pendingCancel" @click="openCancel(r)">Удалить поступление</button><button @click="history(r.id)">История изменений</button></div>
    <p>{{r.source}} · Накладная: {{r.invoice||'не указана'}}</p><p v-if="r.note">{{r.note}}</p>
    <div class="table-wrap"><table><thead><tr><th>Документ</th><th>Количество</th><th>Цена одного экземпляра</th><th>Сумма</th><th>Сигла при поступлении</th></tr></thead>
     <tbody><tr v-for="line in r.lines" :key="line.id"><td>{{line.title}} <small class="block">Запись №{{line.record_id}}</small></td><td>{{line.quantity}}</td><td>{{line.unit_price===null?'Не указана':line.unit_price+' '+line.currency}}</td><td>{{line.amount===null?'Не определена':line.amount+' '+line.currency}}</td><td>{{line.sigla||'—'}}</td></tr></tbody>
