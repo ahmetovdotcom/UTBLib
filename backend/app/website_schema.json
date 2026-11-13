@@ -1,0 +1,2784 @@
+{
+  "contacts": {
+    "label": "Контакты",
+    "schema": {
+      "label": "",
+      "type": "locales",
+      "item": {
+        "label": "",
+        "type": "object",
+        "fields": {
+          "hero_eyebrow": {
+            "label": "Подпись над заголовком",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "hero_title_a": {
+            "label": "Заголовок: первая строка",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "hero_title_b": {
+            "label": "Заголовок: вторая строка",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "hero_body": {
+            "label": "Вступительный текст",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "support_heading": {
+            "label": "Заголовок каналов связи",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "support_channels": {
+            "label": "Каналы связи",
+            "type": "list",
+            "item": {
+              "label": "",
+              "type": "object",
+              "fields": {
+                "slug": {
+                  "label": "Идентификатор",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 100,
+                  "multiline": false,
+                  "hidden": true
+                },
+                "icon": {
+                  "label": "Значок",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 100,
+                  "multiline": false,
+                  "hidden": true
+                },
+                "title": {
+                  "label": "Заголовок",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false
+                },
+                "body": {
+                  "label": "Текст",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": true
+                },
+                "email": {
+                  "label": "Электронная почта",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false,
+                  "format": "email"
+                },
+                "phone": {
+                  "label": "Телефон",
+                  "type": "text",
+                  "nullable": true,
+                  "max": 10000,
+                  "multiline": false
+                }
+              }
+            },
+            "max": 100
+          },
+          "location_title": {
+            "label": "Заголовок блока адреса",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "location_address_line_a": {
+            "label": "Адрес: первая строка",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "location_address_line_b": {
+            "label": "Адрес: вторая строка",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "location_phone": {
+            "label": "Основной телефон",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "location_mobile": {
+            "label": "Дополнительный телефон",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "location_email": {
+            "label": "Почта библиотеки",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false,
+            "format": "email"
+          },
+          "instagram_url": {
+            "label": "Ссылка Instagram",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false,
+            "format": "link"
+          },
+          "instagram_handle": {
+            "label": "Имя в Instagram",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "location_directions_cta": {
+            "label": "Текст кнопки маршрута",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "hours_label": {
+            "label": "Заголовок режима работы",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "hours_rows": {
+            "label": "Расписание",
+            "type": "list",
+            "item": {
+              "label": "",
+              "type": "object",
+              "fields": {
+                "days": {
+                  "label": "Дни недели",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false
+                },
+                "hours": {
+                  "label": "Время работы",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false
+                }
+              }
+            },
+            "max": 100
+          },
+          "hours_source_label": {
+            "label": "Подпись источника расписания",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "hours_source_url": {
+            "label": "Ссылка на источник расписания",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false,
+            "format": "link"
+          },
+          "fund_rooms": {
+            "label": "Помещения и пункты обслуживания",
+            "type": "list",
+            "item": {
+              "label": "",
+              "type": "object",
+              "fields": {
+                "room": {
+                  "label": "Кабинет",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false
+                },
+                "floor": {
+                  "label": "Этаж",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false
+                },
+                "fund_label": {
+                  "label": "Подразделение фонда",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false
+                },
+                "short_description": {
+                  "label": "Описание",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false
+                },
+                "access_note": {
+                  "label": "Условия доступа",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false
+                }
+              }
+            },
+            "max": 100
+          },
+          "visit_title": {
+            "label": "Заголовок блока посещения",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "visit_body": {
+            "label": "Текст блока посещения",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "visit_link_rules_title": {
+            "label": "Название ссылки на правила",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "visit_link_rules_body": {
+            "label": "Описание правил",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "visit_link_leadership_title": {
+            "label": "Название ссылки на руководство",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "visit_link_leadership_body": {
+            "label": "Описание руководства",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "staff_heading": {
+            "label": "Заголовок списка сотрудников",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "staff_note": {
+            "label": "Описание списка сотрудников",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "labels": {
+            "label": "Подписи и дополнительные блоки",
+            "type": "object",
+            "fields": {
+              "eyebrow": {
+                "label": "Подпись над заголовком",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "title": {
+                "label": "Заголовок",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "body": {
+                "label": "Текст",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": true
+              },
+              "cta_authenticated": {
+                "label": "Кнопка для вошедшего читателя",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "cta_guest": {
+                "label": "Кнопка для гостя",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "rooms": {
+                "label": "Подпись помещений",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "staff": {
+                "label": "Подпись сотрудников",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "related": {
+                "label": "Подпись полезных ссылок",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "support_eyebrow": {
+                "label": "Подпись каналов связи",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "hours_eyebrow": {
+                "label": "Подпись расписания",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "staff_eyebrow": {
+                "label": "Подпись списка сотрудников",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "call": {
+                "label": "Кнопка звонка",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "write": {
+                "label": "Кнопка письма",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "instagram": {
+                "label": "Подпись Instagram",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "directions": {
+                "label": "Кнопка маршрута",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              }
+            }
+          },
+          "wayfinding_title": {
+            "label": "Заголовок списка помещений",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "wayfinding_body": {
+            "label": "Описание помещений",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "room_prefix": {
+            "label": "Подпись номера кабинета",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          }
+        }
+      },
+      "fields": {}
+    }
+  },
+  "leadership": {
+    "label": "Руководство",
+    "schema": {
+      "label": "",
+      "type": "object",
+      "fields": {
+        "header": {
+          "label": "Верхний блок",
+          "type": "locales",
+          "item": {
+            "label": "",
+            "type": "object",
+            "fields": {
+              "eyebrow": {
+                "label": "Подпись над заголовком",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "headline": {
+                "label": "Заголовок",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "lede": {
+                "label": "Вступление",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": true
+              }
+            }
+          },
+          "fields": {}
+        },
+        "mandate": {
+          "label": "Полномочия и подчинённость",
+          "type": "locales",
+          "item": {
+            "label": "",
+            "type": "object",
+            "fields": {
+              "eyebrow": {
+                "label": "Подпись над заголовком",
+                "type": "text",
+                "nullable": true,
+                "max": 10000,
+                "multiline": false
+              },
+              "title": {
+                "label": "Заголовок",
+                "type": "text",
+                "nullable": true,
+                "max": 10000,
+                "multiline": false
+              },
+              "paragraph": {
+                "label": "Основной текст",
+                "type": "text",
+                "nullable": true,
+                "max": 10000,
+                "multiline": false
+              },
+              "reports_to_label": {
+                "label": "Подпись подчинённости",
+                "type": "text",
+                "nullable": true,
+                "max": 10000,
+                "multiline": false
+              },
+              "reports_to_value": {
+                "label": "Кому подчиняется библиотека",
+                "type": "text",
+                "nullable": true,
+                "max": 10000,
+                "multiline": false
+              }
+            }
+          },
+          "fields": {}
+        },
+        "support_cta": {
+          "label": "Блок обращений",
+          "type": "locales",
+          "item": {
+            "label": "",
+            "type": "object",
+            "fields": {
+              "eyebrow": {
+                "label": "Подпись над заголовком",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "heading": {
+                "label": "Заголовок",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "body": {
+                "label": "Текст",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": true
+              },
+              "label": {
+                "label": "Подпись",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "href": {
+                "label": "Адрес ссылки",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false,
+                "format": "path"
+              }
+            }
+          },
+          "fields": {}
+        },
+        "last_reviewed_at": {
+          "label": "Дата последнего обновления",
+          "type": "text",
+          "nullable": true,
+          "max": 10000,
+          "multiline": false
+        },
+        "labels": {
+          "label": "Подписи и дополнительные блоки",
+          "type": "locales",
+          "item": {
+            "label": "",
+            "type": "object",
+            "fields": {
+              "hero_eyebrow": {
+                "label": "Подпись над заголовком",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "basis_label": {
+                "label": "Подпись основания публикации",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "basis_value": {
+                "label": "Основание публикации",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "contact_label": {
+                "label": "Подпись контактов",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "contact_value": {
+                "label": "Контакты для обращений",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "directory_eyebrow": {
+                "label": "Подпись списка руководителей",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "directory_title": {
+                "label": "Заголовок списка руководителей",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "directory_body": {
+                "label": "Описание списка руководителей",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "verified": {
+                "label": "Подпись подтверждения",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "email": {
+                "label": "Электронная почта",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "extension": {
+                "label": "Подпись внутреннего номера",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              }
+            }
+          },
+          "fields": {}
+        }
+      }
+    }
+  },
+  "rules": {
+    "label": "Правила библиотеки",
+    "schema": {
+      "label": "",
+      "type": "object",
+      "fields": {
+        "header": {
+          "label": "Верхний блок",
+          "type": "locales",
+          "item": {
+            "label": "",
+            "type": "object",
+            "fields": {
+              "eyebrow": {
+                "label": "Подпись над заголовком",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "headline": {
+                "label": "Заголовок",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "subtitle_secondary_lang": {
+                "label": "Дополнительный заголовок",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "preamble": {
+                "label": "Вступление",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": true
+              },
+              "effective_label": {
+                "label": "Подпись даты вступления в силу",
+                "type": "text",
+                "nullable": true,
+                "max": 10000,
+                "multiline": false
+              },
+              "effective_date": {
+                "label": "Дата вступления в силу",
+                "type": "text",
+                "nullable": true,
+                "max": 10000,
+                "multiline": false
+              },
+              "reviewed_label": {
+                "label": "Подпись даты обновления",
+                "type": "text",
+                "nullable": true,
+                "max": 10000,
+                "multiline": false
+              }
+            }
+          },
+          "fields": {}
+        },
+        "toc": {
+          "label": "Содержание",
+          "type": "locales",
+          "item": {
+            "label": "",
+            "type": "object",
+            "fields": {
+              "label": {
+                "label": "Подпись",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "items": {
+                "label": "Пункты",
+                "type": "list",
+                "item": {
+                  "label": "",
+                  "type": "object",
+                  "fields": {
+                    "href": {
+                      "label": "Адрес ссылки",
+                      "type": "text",
+                      "nullable": false,
+                      "max": 10000,
+                      "multiline": false,
+                      "format": "path"
+                    },
+                    "label": {
+                      "label": "Подпись",
+                      "type": "text",
+                      "nullable": false,
+                      "max": 10000,
+                      "multiline": false
+                    }
+                  }
+                },
+                "max": 100
+              }
+            }
+          },
+          "fields": {}
+        },
+        "general": {
+          "label": "Общие положения",
+          "type": "locales",
+          "item": {
+            "label": "",
+            "type": "object",
+            "fields": {
+              "number": {
+                "label": "Номер раздела",
+                "type": "text",
+                "nullable": false,
+                "max": 100,
+                "multiline": false,
+                "hidden": true
+              },
+              "eyebrow": {
+                "label": "Подпись над заголовком",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "title": {
+                "label": "Заголовок",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "lede": {
+                "label": "Вступление",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": true
+              },
+              "items": {
+                "label": "Пункты",
+                "type": "list",
+                "item": {
+                  "label": "",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": true
+                },
+                "max": 100
+              }
+            }
+          },
+          "fields": {}
+        },
+        "borrowing": {
+          "label": "Выдача и возврат",
+          "type": "locales",
+          "item": {
+            "label": "",
+            "type": "object",
+            "fields": {
+              "number": {
+                "label": "Номер раздела",
+                "type": "text",
+                "nullable": false,
+                "max": 100,
+                "multiline": false,
+                "hidden": true
+              },
+              "eyebrow": {
+                "label": "Подпись над заголовком",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "title": {
+                "label": "Заголовок",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "lede": {
+                "label": "Вступление",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": true
+              },
+              "groups": {
+                "label": "Группы читателей",
+                "type": "list",
+                "item": {
+                  "label": "",
+                  "type": "object",
+                  "fields": {
+                    "icon": {
+                      "label": "Значок",
+                      "type": "text",
+                      "nullable": false,
+                      "max": 100,
+                      "multiline": false,
+                      "hidden": true
+                    },
+                    "audience": {
+                      "label": "Категория читателей",
+                      "type": "text",
+                      "nullable": false,
+                      "max": 10000,
+                      "multiline": false
+                    },
+                    "rows": {
+                      "label": "Условия",
+                      "type": "list",
+                      "item": {
+                        "label": "",
+                        "type": "object",
+                        "fields": {
+                          "label": {
+                            "label": "Подпись",
+                            "type": "text",
+                            "nullable": false,
+                            "max": 10000,
+                            "multiline": false
+                          },
+                          "value": {
+                            "label": "Значение",
+                            "type": "text",
+                            "nullable": false,
+                            "max": 10000,
+                            "multiline": false
+                          }
+                        }
+                      },
+                      "max": 100
+                    }
+                  }
+                },
+                "max": 100
+              },
+              "notes": {
+                "label": "Примечания",
+                "type": "list",
+                "item": {
+                  "label": "",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false
+                },
+                "max": 100
+              }
+            }
+          },
+          "fields": {}
+        },
+        "digital": {
+          "label": "Читальный зал",
+          "type": "locales",
+          "item": {
+            "label": "",
+            "type": "object",
+            "fields": {
+              "number": {
+                "label": "Номер раздела",
+                "type": "text",
+                "nullable": false,
+                "max": 100,
+                "multiline": false,
+                "hidden": true
+              },
+              "eyebrow": {
+                "label": "Подпись над заголовком",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "title": {
+                "label": "Заголовок",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "lede": {
+                "label": "Вступление",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": true
+              },
+              "items": {
+                "label": "Пункты",
+                "type": "list",
+                "item": {
+                  "label": "",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": true
+                },
+                "max": 100
+              }
+            }
+          },
+          "fields": {}
+        },
+        "conduct": {
+          "label": "Обязанности читателей",
+          "type": "locales",
+          "item": {
+            "label": "",
+            "type": "object",
+            "fields": {
+              "number": {
+                "label": "Номер раздела",
+                "type": "text",
+                "nullable": false,
+                "max": 100,
+                "multiline": false,
+                "hidden": true
+              },
+              "eyebrow": {
+                "label": "Подпись над заголовком",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "title": {
+                "label": "Заголовок",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "lede": {
+                "label": "Вступление",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": true
+              },
+              "items": {
+                "label": "Пункты",
+                "type": "list",
+                "item": {
+                  "label": "",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false
+                },
+                "max": 100
+              }
+            }
+          },
+          "fields": {}
+        },
+        "penalties": {
+          "label": "Ответственность",
+          "type": "locales",
+          "item": {
+            "label": "",
+            "type": "object",
+            "fields": {
+              "number": {
+                "label": "Номер раздела",
+                "type": "text",
+                "nullable": false,
+                "max": 100,
+                "multiline": false,
+                "hidden": true
+              },
+              "eyebrow": {
+                "label": "Подпись над заголовком",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "title": {
+                "label": "Заголовок",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "lede": {
+                "label": "Вступление",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": true
+              },
+              "items": {
+                "label": "Пункты",
+                "type": "list",
+                "item": {
+                  "label": "",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false
+                },
+                "max": 100
+              },
+              "suspension_ladder_label": {
+                "label": "Заголовок мер ответственности",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "suspension_ladder": {
+                "label": "Меры ответственности",
+                "type": "list",
+                "item": {
+                  "label": "",
+                  "type": "object",
+                  "fields": {
+                    "level": {
+                      "label": "Мера",
+                      "type": "text",
+                      "nullable": false,
+                      "max": 10000,
+                      "multiline": false
+                    },
+                    "detail": {
+                      "label": "Описание",
+                      "type": "text",
+                      "nullable": false,
+                      "max": 10000,
+                      "multiline": false
+                    }
+                  }
+                },
+                "max": 100
+              },
+              "appeal_label": {
+                "label": "Подпись источника",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "appeal_text": {
+                "label": "Текст источника",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              }
+            }
+          },
+          "fields": {}
+        },
+        "footer_meta": {
+          "label": "Заключительный блок",
+          "type": "locales",
+          "item": {
+            "label": "",
+            "type": "object",
+            "fields": {
+              "eyebrow": {
+                "label": "Подпись над заголовком",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "heading": {
+                "label": "Заголовок",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "body": {
+                "label": "Текст",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": true
+              },
+              "contacts_label": {
+                "label": "Подпись ссылки на контакты",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "contacts_href": {
+                "label": "Ссылка на контакты",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false,
+                "format": "path"
+              },
+              "leadership_label": {
+                "label": "Подпись ссылки на руководство",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "leadership_href": {
+                "label": "Ссылка на руководство",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false,
+                "format": "path"
+              },
+              "version_label": {
+                "label": "Подпись версии",
+                "type": "text",
+                "nullable": true,
+                "max": 10000,
+                "multiline": false
+              },
+              "version_value": {
+                "label": "Версия документа",
+                "type": "text",
+                "nullable": true,
+                "max": 10000,
+                "multiline": false
+              }
+            }
+          },
+          "fields": {}
+        },
+        "last_reviewed_at": {
+          "label": "Дата последнего обновления",
+          "type": "text",
+          "nullable": true,
+          "max": 10000,
+          "multiline": false
+        },
+        "labels": {
+          "label": "Подписи и дополнительные блоки",
+          "type": "locales",
+          "item": {
+            "label": "",
+            "type": "object",
+            "fields": {
+              "scope_label": {
+                "label": "Подпись структуры документа",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "scope_value": {
+                "label": "Структура документа",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "terms_label": {
+                "label": "Подпись условий пользования",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "terms_value": {
+                "label": "Условия пользования",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              }
+            }
+          },
+          "fields": {}
+        }
+      }
+    }
+  },
+  "about": {
+    "label": "О библиотеке",
+    "schema": {
+      "label": "",
+      "type": "locales",
+      "item": {
+        "label": "",
+        "type": "object",
+        "fields": {
+          "title": {
+            "label": "Заголовок",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "collection_areas": {
+            "label": "Направления фонда",
+            "type": "list",
+            "item": {
+              "label": "",
+              "type": "object",
+              "fields": {
+                "slug": {
+                  "label": "Идентификатор",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 100,
+                  "multiline": false,
+                  "hidden": true
+                },
+                "title": {
+                  "label": "Заголовок",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false
+                },
+                "body": {
+                  "label": "Текст",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": true
+                }
+              }
+            },
+            "max": 100
+          },
+          "directory_rows": {
+            "label": "Ссылки на разделы",
+            "type": "list",
+            "item": {
+              "label": "",
+              "type": "object",
+              "fields": {
+                "slug": {
+                  "label": "Идентификатор",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 100,
+                  "multiline": false,
+                  "hidden": true
+                },
+                "title": {
+                  "label": "Заголовок",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false
+                },
+                "body": {
+                  "label": "Текст",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": true
+                },
+                "href": {
+                  "label": "Адрес ссылки",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false,
+                  "format": "path"
+                },
+                "cta": {
+                  "label": "Текст кнопки",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false
+                }
+              }
+            },
+            "max": 100
+          },
+          "canon_hero_eyebrow": {
+            "label": "Подпись над заголовком",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "canon_hero_title_a": {
+            "label": "Заголовок: первая строка",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "canon_hero_title_b": {
+            "label": "Заголовок: вторая строка",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "canon_hero_body": {
+            "label": "Вступительный текст",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": true
+          },
+          "canon_hero_badge_title": {
+            "label": "Заголовок карточки университета",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "canon_hero_badge_body": {
+            "label": "Описание карточки университета",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "canon_mission_title": {
+            "label": "Заголовок миссии",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "canon_mission_body": {
+            "label": "Миссия библиотеки",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": true
+          },
+          "canon_mission_cta": {
+            "label": "Текст кнопки каталога",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "canon_stats": {
+            "label": "Информационные показатели",
+            "type": "list",
+            "item": {
+              "label": "",
+              "type": "object",
+              "fields": {
+                "value": {
+                  "label": "Значение",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false
+                },
+                "label": {
+                  "label": "Подпись",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false
+                }
+              }
+            },
+            "max": 100
+          },
+          "canon_collection_header_title": {
+            "label": "Заголовок направлений фонда",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "canon_collection_header_body": {
+            "label": "Описание направлений фонда",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": true
+          },
+          "canon_directory_title": {
+            "label": "Заголовок ссылок на разделы",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "canon_areas_material_icons": {
+            "label": "Значки направлений",
+            "type": "object",
+            "fields": {
+              "technology": {
+                "label": "Технологии",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "economy": {
+                "label": "Экономика",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "humanities": {
+                "label": "Гуманитарные науки",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "college": {
+                "label": "Колледж",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              }
+            },
+            "hidden": true
+          }
+        }
+      },
+      "fields": {}
+    }
+  },
+  "home": {
+    "label": "Главная: первый экран",
+    "schema": {
+      "label": "",
+      "type": "locales",
+      "item": {
+        "label": "",
+        "type": "object",
+        "fields": {
+          "title": {
+            "label": "Заголовок",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "hero_h1": {
+            "label": "Главный заголовок",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "hero_h1_accent": {
+            "label": "Выделенная часть заголовка",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "hero_lead": {
+            "label": "Описание под заголовком",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "search_placeholder": {
+            "label": "Подсказка поиска",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "search_cta": {
+            "label": "Текст кнопки поиска",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "hero_img_alt": {
+            "label": "Описание изображения",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "identity_brand": {
+            "label": "Название библиотеки",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "additional": {
+            "label": "Другие блоки главной страницы",
+            "type": "object",
+            "fields": {
+              "text_1": {
+                "label": "Экономическая библиотека",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "text_2": {
+                "label": "Технологическая библиотека",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "text_3": {
+                "label": "Библиотека колледжа",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "text_4": {
+                "label": "Подразделения фонда",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "text_5": {
+                "label": "Книги по библиотечным фондам",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "text_6": {
+                "label": "Данные сформированы по зарегистрированным экземплярам и числу выдач.",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "text_7": {
+                "label": "Открыть каталог",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "text_8": {
+                "label": "Чаще выдаваемые книги",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "text_9": {
+                "label": "Книги фонда",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "text_10": {
+                "label": "Доступно",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "text_11": {
+                "label": "экз.",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "text_12": {
+                "label": "Открыть фонд",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "text_13": {
+                "label": "Маршрут читателя",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "text_14": {
+                "label": "Как пользоваться библиотекой",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "text_15": {
+                "label": "Получите доступ к фонду библиотеки всего за несколько простых шагов.",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "text_16": {
+                "label": "Маршрут читателя",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "text_17": {
+                "label": "Шаг",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "text_18": {
+                "label": "Важно знать",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "text_19": {
+                "label": "Важно знать",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "text_20": {
+                "label": "Актуальные сроки выдачи и условия бронирования отображаются в личном кабинете. У",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "text_21": {
+                "label": "Перейти в каталог",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              }
+            }
+          },
+          "usage_steps": {
+            "label": "Как пользоваться библиотекой",
+            "type": "list",
+            "item": {
+              "label": "",
+              "type": "object",
+              "fields": {
+                "icon": {
+                  "label": "Значок",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 100,
+                  "multiline": false,
+                  "hidden": true
+                },
+                "title": {
+                  "label": "Заголовок",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false
+                },
+                "lead": {
+                  "label": "Вступительный текст",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false
+                }
+              }
+            },
+            "max": 100
+          }
+        }
+      },
+      "fields": {}
+    }
+  },
+  "footer": {
+    "label": "Нижняя часть сайта",
+    "schema": {
+      "label": "",
+      "type": "locales",
+      "item": {
+        "label": "",
+        "type": "object",
+        "fields": {
+          "brand": {
+            "label": "Название организации",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "tagline": {
+            "label": "Девиз",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "address": {
+            "label": "Строки адреса",
+            "type": "list",
+            "item": {
+              "label": "",
+              "type": "text",
+              "nullable": false,
+              "max": 10000,
+              "multiline": false
+            },
+            "max": 100
+          },
+          "navigation": {
+            "label": "Заголовок навигации",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "updates": {
+            "label": "Заголовок обновлений",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "institution": {
+            "label": "Заголовок информации о библиотеке",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "support": {
+            "label": "Заголовок поддержки",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "navigation_links": {
+            "label": "Навигационные ссылки",
+            "type": "list",
+            "item": {
+              "label": "",
+              "type": "object",
+              "fields": {
+                "label": {
+                  "label": "Подпись",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false
+                },
+                "href": {
+                  "label": "Адрес ссылки",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false,
+                  "format": "link"
+                }
+              }
+            },
+            "max": 100
+          },
+          "updates_links": {
+            "label": "Ссылки на обновления",
+            "type": "list",
+            "item": {
+              "label": "",
+              "type": "object",
+              "fields": {
+                "label": {
+                  "label": "Подпись",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false
+                },
+                "href": {
+                  "label": "Адрес ссылки",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false,
+                  "format": "link"
+                }
+              }
+            },
+            "max": 100
+          },
+          "institution_links": {
+            "label": "Ссылки о библиотеке",
+            "type": "list",
+            "item": {
+              "label": "",
+              "type": "object",
+              "fields": {
+                "label": {
+                  "label": "Подпись",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false
+                },
+                "href": {
+                  "label": "Адрес ссылки",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false,
+                  "format": "link"
+                }
+              }
+            },
+            "max": 100
+          },
+          "support_links": {
+            "label": "Ссылки поддержки",
+            "type": "list",
+            "item": {
+              "label": "",
+              "type": "object",
+              "fields": {
+                "label": {
+                  "label": "Подпись",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false
+                },
+                "href": {
+                  "label": "Адрес ссылки",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false,
+                  "format": "link"
+                }
+              }
+            },
+            "max": 100
+          },
+          "rights": {
+            "label": "Авторские права",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "entity": {
+            "label": "Юридическое наименование",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          }
+        }
+      },
+      "fields": {}
+    }
+  },
+  "header": {
+    "label": "Шапка и меню",
+    "schema": {
+      "label": "",
+      "type": "locales",
+      "item": {
+        "label": "",
+        "type": "object",
+        "fields": {
+          "org": {
+            "label": "Название университета",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "links": {
+            "label": "Основное меню",
+            "type": "list",
+            "item": {
+              "type": "tuple",
+              "label": "Ссылка",
+              "items": [
+                {
+                  "label": "Идентификатор",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 100,
+                  "multiline": false,
+                  "hidden": true
+                },
+                {
+                  "label": "Подпись",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false
+                },
+                {
+                  "label": "Адрес ссылки",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false,
+                  "format": "path"
+                }
+              ]
+            },
+            "max": 100
+          },
+          "institution": {
+            "label": "Заголовок информации о библиотеке",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "institution_links": {
+            "label": "Ссылки о библиотеке",
+            "type": "list",
+            "item": {
+              "type": "tuple",
+              "label": "Ссылка",
+              "items": [
+                {
+                  "label": "Подпись",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false
+                },
+                {
+                  "label": "Адрес ссылки",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false,
+                  "format": "path"
+                }
+              ]
+            },
+            "max": 100
+          },
+          "contacts_menu": {
+            "label": "Название меню контактов",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "contacts_menu_aria": {
+            "label": "Описание меню контактов",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "contacts_links": {
+            "label": "Разделы меню контактов",
+            "type": "list",
+            "item": {
+              "type": "tuple",
+              "label": "Ссылка",
+              "items": [
+                {
+                  "label": "Идентификатор",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 100,
+                  "multiline": false,
+                  "hidden": true
+                },
+                {
+                  "label": "Подпись",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false
+                },
+                {
+                  "label": "Текст",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": true
+                },
+                {
+                  "label": "Адрес ссылки",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false,
+                  "format": "path"
+                }
+              ]
+            },
+            "max": 100
+          },
+          "search": {
+            "label": "Название поиска",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "assistant": {
+            "label": "Название помощника",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "language": {
+            "label": "Название выбора языка",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "search_placeholder": {
+            "label": "Подсказка поиска",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "shortlist": {
+            "label": "Подборка",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "notifications": {
+            "label": "Уведомления",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "menu": {
+            "label": "Меню",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "guest": {
+            "label": "Кнопка входа",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "dashboard": {
+            "label": "Личный кабинет",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "signout": {
+            "label": "Кнопка выхода",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "lang_aria": {
+            "label": "Описание выбора языка",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "library_name": {
+            "label": "Название библиотеки",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          },
+          "university_name": {
+            "label": "Полное название университета",
+            "type": "text",
+            "nullable": false,
+            "max": 10000,
+            "multiline": false
+          }
+        }
+      },
+      "fields": {}
+    }
+  },
+  "home-sections": {
+    "label": "Главная: разделы и вопросы",
+    "schema": {
+      "label": "",
+      "type": "locales",
+      "item": {
+        "label": "",
+        "type": "object",
+        "fields": {
+          "faculty": {
+            "label": "Подразделения фонда",
+            "type": "object",
+            "fields": {
+              "kicker": {
+                "label": "Подпись над заголовком",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "title": {
+                "label": "Заголовок",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "lead": {
+                "label": "Вступительный текст",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "cta": {
+                "label": "Текст кнопки",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "count_label": {
+                "label": "Подпись количества",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "all": {
+                "label": "Текст ссылки на полный список",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "names": {
+                "label": "Названия разделов",
+                "type": "object",
+                "fields": {
+                  "econ": {
+                    "label": "Экономическая библиотека",
+                    "type": "text",
+                    "nullable": false,
+                    "max": 10000,
+                    "multiline": false
+                  },
+                  "tech": {
+                    "label": "Технологическая библиотека",
+                    "type": "text",
+                    "nullable": false,
+                    "max": 10000,
+                    "multiline": false
+                  },
+                  "engit": {
+                    "label": "Библиотека колледжа",
+                    "type": "text",
+                    "nullable": false,
+                    "max": 10000,
+                    "multiline": false
+                  }
+                }
+              }
+            }
+          },
+          "arrivals": {
+            "label": "Новые поступления",
+            "type": "object",
+            "fields": {
+              "kicker": {
+                "label": "Подпись над заголовком",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "title": {
+                "label": "Заголовок",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "lead": {
+                "label": "Вступительный текст",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "all": {
+                "label": "Текст ссылки на полный список",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "details": {
+                "label": "Кнопка подробностей",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "available": {
+                "label": "Подпись наличия",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "unavailable": {
+                "label": "Подпись отсутствия свободных экземпляров",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "no_holdings": {
+                "label": "Подпись отсутствия сведений о наличии",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "generated_cover": {
+                "label": "Подпись отсутствия обложки",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "copies": {
+                "label": "Подпись экземпляров",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "prev": {
+                "label": "Предыдущие поступления",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "next": {
+                "label": "Следующие поступления",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "empty": {
+                "label": "Текст для пустого списка",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "no_publisher": {
+                "label": "Подпись отсутствия издательства",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              }
+            }
+          },
+          "collections": {
+            "label": "Тематические коллекции",
+            "type": "object",
+            "fields": {
+              "kicker": {
+                "label": "Подпись над заголовком",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "title": {
+                "label": "Заголовок",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "lead": {
+                "label": "Вступительный текст",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "all": {
+                "label": "Текст ссылки на полный список",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "count_label": {
+                "label": "Подпись количества",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "names": {
+                "label": "Названия разделов",
+                "type": "object",
+                "fields": {
+                  "62": {
+                    "label": "Раздел УДК 62",
+                    "type": "text",
+                    "nullable": false,
+                    "max": 10000,
+                    "multiline": false
+                  },
+                  "004": {
+                    "label": "Раздел УДК 004",
+                    "type": "text",
+                    "nullable": false,
+                    "max": 10000,
+                    "multiline": false
+                  },
+                  "005": {
+                    "label": "Раздел УДК 005",
+                    "type": "text",
+                    "nullable": false,
+                    "max": 10000,
+                    "multiline": false
+                  },
+                  "33": {
+                    "label": "Раздел УДК 33",
+                    "type": "text",
+                    "nullable": false,
+                    "max": 10000,
+                    "multiline": false
+                  },
+                  "34": {
+                    "label": "Раздел УДК 34",
+                    "type": "text",
+                    "nullable": false,
+                    "max": 10000,
+                    "multiline": false
+                  },
+                  "61": {
+                    "label": "Раздел УДК 61",
+                    "type": "text",
+                    "nullable": false,
+                    "max": 10000,
+                    "multiline": false
+                  },
+                  "94": {
+                    "label": "Раздел УДК 94",
+                    "type": "text",
+                    "nullable": false,
+                    "max": 10000,
+                    "multiline": false
+                  },
+                  "159.9": {
+                    "label": "Раздел УДК 159.9",
+                    "type": "text",
+                    "nullable": false,
+                    "max": 10000,
+                    "multiline": false
+                  },
+                  "80": {
+                    "label": "Раздел УДК 80",
+                    "type": "text",
+                    "nullable": false,
+                    "max": 10000,
+                    "multiline": false
+                  },
+                  "72": {
+                    "label": "Раздел УДК 72",
+                    "type": "text",
+                    "nullable": false,
+                    "max": 10000,
+                    "multiline": false
+                  }
+                }
+              },
+              "descriptions": {
+                "label": "Описания разделов",
+                "type": "object",
+                "fields": {
+                  "62": {
+                    "label": "Раздел УДК 62",
+                    "type": "text",
+                    "nullable": false,
+                    "max": 10000,
+                    "multiline": false
+                  },
+                  "004": {
+                    "label": "Раздел УДК 004",
+                    "type": "text",
+                    "nullable": false,
+                    "max": 10000,
+                    "multiline": false
+                  },
+                  "005": {
+                    "label": "Раздел УДК 005",
+                    "type": "text",
+                    "nullable": false,
+                    "max": 10000,
+                    "multiline": false
+                  },
+                  "33": {
+                    "label": "Раздел УДК 33",
+                    "type": "text",
+                    "nullable": false,
+                    "max": 10000,
+                    "multiline": false
+                  },
+                  "34": {
+                    "label": "Раздел УДК 34",
+                    "type": "text",
+                    "nullable": false,
+                    "max": 10000,
+                    "multiline": false
+                  },
+                  "61": {
+                    "label": "Раздел УДК 61",
+                    "type": "text",
+                    "nullable": false,
+                    "max": 10000,
+                    "multiline": false
+                  },
+                  "94": {
+                    "label": "Раздел УДК 94",
+                    "type": "text",
+                    "nullable": false,
+                    "max": 10000,
+                    "multiline": false
+                  },
+                  "159.9": {
+                    "label": "Раздел УДК 159.9",
+                    "type": "text",
+                    "nullable": false,
+                    "max": 10000,
+                    "multiline": false
+                  },
+                  "80": {
+                    "label": "Раздел УДК 80",
+                    "type": "text",
+                    "nullable": false,
+                    "max": 10000,
+                    "multiline": false
+                  },
+                  "72": {
+                    "label": "Раздел УДК 72",
+                    "type": "text",
+                    "nullable": false,
+                    "max": 10000,
+                    "multiline": false
+                  }
+                }
+              }
+            }
+          },
+          "stats": {
+            "label": "Показатели фонда",
+            "type": "object",
+            "fields": {
+              "kicker": {
+                "label": "Подпись над заголовком",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "title": {
+                "label": "Заголовок",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "lead": {
+                "label": "Вступительный текст",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "items": {
+                "label": "Пункты",
+                "type": "list",
+                "item": {
+                  "label": "",
+                  "type": "text",
+                  "nullable": false,
+                  "max": 10000,
+                  "multiline": false
+                },
+                "max": 0,
+                "hidden": true
+              }
+            }
+          },
+          "faq": {
+            "label": "Частые вопросы",
+            "type": "object",
+            "fields": {
+              "kicker": {
+                "label": "Подпись над заголовком",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "title": {
+                "label": "Заголовок",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "lead": {
+                "label": "Вступительный текст",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "more": {
+                "label": "Текст ссылки на подробности",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "items": {
+                "label": "Пункты",
+                "type": "list",
+                "item": {
+                  "label": "",
+                  "type": "object",
+                  "fields": {
+                    "q": {
+                      "label": "Вопрос",
+                      "type": "text",
+                      "nullable": false,
+                      "max": 10000,
+                      "multiline": false
+                    },
+                    "a": {
+                      "label": "Ответ",
+                      "type": "text",
+                      "nullable": false,
+                      "max": 10000,
+                      "multiline": true
+                    }
+                  }
+                },
+                "max": 100
+              }
+            }
+          },
+          "support": {
+            "label": "Заголовок поддержки",
+            "type": "object",
+            "fields": {
+              "kicker": {
+                "label": "Подпись над заголовком",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "title": {
+                "label": "Заголовок",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "lead": {
+                "label": "Вступительный текст",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "contact": {
+                "label": "Кнопка контактов",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "ai": {
+                "label": "Кнопка помощника",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              },
+              "prompt": {
+                "label": "Вопрос помощнику",
+                "type": "text",
+                "nullable": false,
+                "max": 10000,
+                "multiline": false
+              }
+            }
+          }
+        }
+      },
+      "fields": {
+        "faculties": {
+          "label": "Классификация подразделений",
+          "type": "list",
+          "item": {
+            "label": "",
+            "type": "object",
+            "fields": {
+              "udc": {
+                "label": "Индекс УДК",
+                "type": "text",
+                "nullable": false,
+                "max": 100,
+                "multiline": false,
+                "hidden": false
+              },
+              "icon": {
+                "label": "Значок",
+                "type": "text",
+                "nullable": false,
+                "max": 100,
+                "multiline": false,
+                "hidden": true
+              }
+            }
+          },
+          "max": 100
+        },
+        "collections": {
+          "label": "Тематические коллекции",
+          "type": "list",
+          "item": {
+            "label": "",
+            "type": "object",
+            "fields": {
+              "udc": {
+                "label": "Индекс УДК",
+                "type": "text",
+                "nullable": false,
+                "max": 100,
+                "multiline": false,
+                "hidden": false
+              },
+              "icon": {
+                "label": "Значок",
+                "type": "text",
+                "nullable": false,
+                "max": 100,
+                "multiline": false,
+                "hidden": true
+              }
+            }
+          },
+          "max": 100
+        }
+      }
+    }
+  }
+}

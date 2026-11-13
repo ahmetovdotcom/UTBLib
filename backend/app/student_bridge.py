@@ -23,7 +23,7 @@ from .public_catalog import values
 router = APIRouter(prefix='/api/student/v1', tags=['Student frontend'])
 
 
-def authenticated_reader(request: Request, s=Depends(get_db)):
+def authenticated_subject(request: Request):
     key = os.getenv('STUDENT_BRIDGE_KEY', '')
     if len(key) < 32:
         raise HTTPException(503, 'Student integration is not configured')
@@ -40,6 +40,10 @@ def authenticated_reader(request: Request, s=Depends(get_db)):
     expected = hmac.new(key.encode(), message.encode(), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(signature, expected):
         raise HTTPException(401, 'Invalid assertion')
+    return subject
+
+
+def authenticated_reader(subject=Depends(authenticated_subject), s=Depends(get_db)):
     return reader_for_subject(s, subject)
 
 

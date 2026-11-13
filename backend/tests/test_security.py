@@ -106,9 +106,19 @@ def test_login_throttle_and_hashes(client):
 def test_every_protected_business_route_has_permission():
     from app.public_catalog import PUBLIC_PATHS
     from app.site_content import PUBLIC_PATHS as CONTENT_PATHS
-    PUBLIC_PATHS = PUBLIC_PATHS | CONTENT_PATHS
+    PUBLIC_PATHS = PUBLIC_PATHS | CONTENT_PATHS | {'/api/public/v1/book-covers/{identifier}', '/api/check-in/v1/points/{token}'}
     for route in app.routes:
         path=getattr(route,'path','')
+        if path in ('/api/student/v1/books/{identifier}', '/api/student/v1/books/{identifier}/file'):
+            from app.student_bridge import authenticated_subject
+            assert route.methods == {'GET'}
+            assert any(d.call is authenticated_subject for d in route.dependant.dependencies)
+            continue
+        if path == '/api/check-in/v1/visits':
+            from app.visit_checkin import assertion
+            assert route.methods == {'POST'}
+            assert any(d.call is assertion for d in route.dependant.dependencies)
+            continue
         if path in ('/api/student/v1/me', '/api/student/v1/photo'):
             from app.student_bridge import authenticated_reader
             assert route.methods == {'GET'}

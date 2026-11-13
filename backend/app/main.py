@@ -29,6 +29,8 @@ app.include_router(events_router(auth))
 from .site_content import staff_router as site_staff_router, public_router as site_public_router
 app.include_router(site_staff_router)
 app.include_router(site_public_router)
+from .catalog_files import router as catalog_files_router
+app.include_router(catalog_files_router)
 class Strict(BaseModel): model_config=ConfigDict(extra='forbid')
 class VocabularyConfig(Strict):
     auto_add: bool=False
@@ -61,6 +63,9 @@ from uuid import UUID
 from .acquisitions import InitialAcquisition, initial_body, register, digest, lock_request, make_router
 
 class RecordInput(Strict):
+    is_faculty_work: StrictBool=False
+    use_first_page_cover: StrictBool=False
+    digital_upload: UUID|None=None
     primary_specialty: str|None=None
     request_key: UUID|None=None
     initial_acquisition: InitialAcquisition|None=None
@@ -108,7 +113,8 @@ def create_type(body:TypeInput,s=Depends(db)): return save_type(body,s)
 def edit_type(id:int,body:TypeInput,s=Depends(db)): return save_type(body,s,id)
 def output(r):
     from .specialties import primary
-    return {'primary_specialty':primary(r.marc,r.primary_specialty),'id':r.id,'type_id':r.type_id,'version':r.version,'marc':r.marc}
+    from .catalog_files import file_info
+    return {'is_faculty_work':r.is_faculty_work,'use_first_page_cover':r.use_first_page_cover,'electronic_file':file_info(r.digital_file), 'primary_specialty':primary(r.marc,r.primary_specialty),'id':r.id,'type_id':r.type_id,'version':r.version,'marc':r.marc}
 @app.get('/api/records',dependencies=[Depends(auth)])
 def records(q:str='',udc:str=Query('',max_length=150),type_id:int|None=None,offset:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100),conditions:str=Query('',max_length=8000),match:Literal['all','any']='all',s=Depends(db)):
     stmt=select(Record)
@@ -155,7 +161,7 @@ def record(id:int,s=Depends(db)):
 def save_record(body,s,id=None,user=None):
     if id and (body.initial_acquisition or body.request_key):
         raise HTTPException(422,'Для новых экземпляров используйте «Добавить экземпляры»')
-    request_hash=digest(body.model_dump(mode='json',exclude={'primary_specialty'} if 'primary_specialty' not in body.model_fields_set else set()))
+    request_hash=digest(body.model_dump(mode='json',exclude={k for k in ('primary_specialty','is_faculty_work','use_first_page_cover','digital_upload') if k not in body.model_fields_set}))
     if not id and body.request_key:
         lock_request(s,'record:',body.request_key)
         prior=s.get(RecordCreation,str(body.request_key))
@@ -192,6 +198,8 @@ def save_record(body,s,id=None,user=None):
         if changed.rowcount!=1: raise HTTPException(409,'Record changed or deleted; reload before saving')
     else:
         r=Record(type_id=t.id,marc=marc,search_text=search_text(marc),primary_specialty=selected); s.add(r); s.flush(); id=r.id
+    from .catalog_files import save_publication
+    meaningful=save_publication(s,s.get(Record,id),body,user) or meaningful
     vocab_errors,vocab_warnings=apply_vocabularies(s,t,marc,previous_marc)
     if vocab_errors:
         s.rollback(); raise HTTPException(422,vocab_errors)

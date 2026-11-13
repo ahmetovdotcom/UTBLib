@@ -13,8 +13,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, mapped_column
 from .db import Base, get_db, utcnow
 from .security import auth
+from .website_content import WEBSITE_SCHEMA, validate_email, validate_page
 
-Kind = Literal['resources', 'repository', 'news', 'events']
+Kind = Literal['resources', 'repository', 'news', 'events', 'people', 'pages']
 PUBLIC_PATHS = frozenset({'/api/public/v1/content/{kind}', '/api/public/v1/content/{kind}/{identifier}', '/api/public/v1/content-assets/{item_id}/{slot}'})
 
 
@@ -61,12 +62,27 @@ class Translation(BaseModel):
     instructions: str = Field(default='', max_length=10000)
     venue: str = Field(default='', max_length=500)
     image_alt: str = Field(default='', max_length=500)
+    role: str = Field(default='', max_length=500)
+    source_label: str = Field(default='', max_length=500)
 
 
 class Details(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
     translations: dict[Literal['ru', 'kk', 'en'], Translation] = Field(default_factory=dict)
+    page_content: dict = Field(default_factory=dict)
+    show_contacts: bool = True
+    show_leadership: bool = False
+    sort_order: int = Field(default=0, ge=0, le=99999)
+    email: str = Field(default='', max_length=254)
+    phone: str = Field(default='', max_length=100)
+    extension: str = Field(default='', max_length=30)
     featured: bool = False
+
+    @field_validator('email')
+    @classmethod
+    def email_value(cls, value):
+        return validate_email(value)
+
     category: str = Field(default='', max_length=100)
     url: str = Field(default='', max_length=2000)
     provider: str = Field(default='', max_length=300)
@@ -153,6 +169,14 @@ class ContentInput(BaseModel):
             raise ValueError('Введите название хотя бы на одном языке')
         if self.published_at and self.published_at.tzinfo is None:
             raise ValueError('Для даты публикации укажите часовой пояс')
+        if self.kind == 'pages':
+            self.data.page_content = validate_page(self.slug, self.data.page_content)
+            # Static pages have a single live version; never fall back to old
+            # institutional data because someone accidentally archived a page.
+            if self.status != 'published' or (self.published_at and self.published_at > utcnow()):
+                raise ValueError('Страницы сайта сохраняются опубликованными без отложенной даты')
+        elif self.data.page_content:
+            raise ValueError('Содержимое страницы допустимо только для страниц сайта')
         if self.status == 'published':
             if self.kind == 'resources' and not self.data.url:
                 raise ValueError('Для публикации ресурса нужна ссылка')
@@ -200,7 +224,7 @@ def commit(s):
 
 def locked(s, item_id, version):
     item = s.scalar(select(SiteContent).where(SiteContent.id == item_id).with_for_update())
-    if not item:
+    if not item or item.status == 'deleted':
         raise HTTPException(404, 'Материал не найден')
     if item.version != version:
         raise HTTPException(409, 'Материал изменён другим сотрудником. Откройте его заново.')
@@ -211,9 +235,14 @@ staff_router = APIRouter(prefix='/api/site-content', dependencies=[Depends(auth)
 public_router = APIRouter(prefix='/api/public/v1')
 
 
+@staff_router.get('/website-schema')
+def website_schema():
+    return WEBSITE_SCHEMA
+
+
 @staff_router.get('')
 def staff_list(kind: Kind, q: str = Query('', max_length=200), page: int = Query(1, ge=1), s=Depends(get_db)):
-    query = select(SiteContent).where(SiteContent.kind == kind)
+    query = select(SiteContent).where(SiteContent.kind == kind, SiteContent.status != 'deleted')
     if q.strip():
         query = query.where(SiteContent.data.cast(String).ilike('%' + q.strip().replace('%', '\\%').replace('_', '\\_') + '%', escape='\\'))
     total = s.scalar(select(func.count()).select_from(query.subquery()))
@@ -237,6 +266,8 @@ def create(body: ContentInput, user=Depends(auth), s=Depends(get_db)):
 @staff_router.put('/{item_id}')
 def update(item_id: int, body: ContentInput, user=Depends(auth), s=Depends(get_db)):
     item = locked(s, item_id, body.version)
+    if item.kind == 'pages' and item.slug != body.slug:
+        raise HTTPException(422, 'Адрес системной страницы нельзя менять')
     if body.kind != item.kind:
         raise HTTPException(422, 'Раздел материала нельзя менять')
     item.slug, item.status, item.data = body.slug, body.status, body.data.model_dump(mode='json')
@@ -244,6 +275,21 @@ def update(item_id: int, body: ContentInput, user=Depends(auth), s=Depends(get_d
     item.version += 1; item.updated_at = utcnow()
     audit(s, item, user, 'update'); commit(s)
     return present(s, item, True)
+
+
+@staff_router.delete('/{item_id}')
+def delete_content(item_id: int, version: int = Query(ge=1), user=Depends(auth), s=Depends(get_db)):
+    item = locked(s, item_id, version)
+    if item.kind == 'pages':
+        raise HTTPException(422, 'Страницы сайта нельзя удалять; отредактируйте их содержимое')
+    item.status = 'deleted'
+    item.version += 1
+    item.updated_at = utcnow()
+    audit(s, item, user, 'delete')
+    for asset in s.scalars(select(SiteAsset).where(SiteAsset.item_id == item_id)):
+        s.delete(asset)
+    commit(s)
+    return {'status': 'deleted'}
 
 
 @staff_router.put('/{item_id}/assets/{slot}')

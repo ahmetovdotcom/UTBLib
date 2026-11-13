@@ -1,21 +1,25 @@
 <script setup lang="ts">
 import {usePageRoute,usePageMemory,useNavigationGuard,routeTab} from './navigation';
-import {computed,onMounted,ref} from 'vue';
+import {computed,ref} from 'vue';
+import WebsiteFields from './WebsiteFields.vue';
 const props=defineProps<{api:(path:string,method?:string,body?:any)=>Promise<any>,csrf:string}>();
-const sections:Record<string,string>={resources:'Ресурсы',repository:'Репозиторий',news:'Новости',events:'События'};
+const sections:Record<string,string>={resources:'Ресурсы',repository:'Репозиторий',news:'Новости',events:'События',people:'Сотрудники и руководство',pages:'Страницы и контакты'};
 const kind=ref('resources'),items=ref<any[]>([]),total=ref(0),page=ref(1),q=ref(''),busy=ref(false),error=ref(''),message=ref(''),editor=ref<any>(null),locale=ref('ru'),baseline=ref('');
+const websiteSchema=ref<Record<string,any>>({});
+const pageLinks:Record<string,string>={contacts:'/contacts',leadership:'/leadership',rules:'/rules',about:'/about',home:'/', 'home-sections':'/',header:'Все страницы',footer:'Все страницы'};
 const languages:Record<string,string>={ru:'Русский',kk:'Қазақша',en:'English'};
 const statuses:Record<string,string>={draft:'Черновик',published:'Опубликовано',archived:'Архив'};
 const contentTypes:Record<string,string>={electronic_books:'Электронные книги',scientific_articles:'Научные статьи',dissertations:'Диссертации',research_reports:'Научные отчёты',faculty_works:'Труды преподавателей',journals:'Журналы',research_data:'Данные исследований',educational_materials:'Учебные материалы',multimedia:'Мультимедиа',braille_books:'Книги Брайля',audiobooks:'Аудиокниги',catalogues:'Каталоги'};
 const workTypes:Record<string,string>={bachelor_thesis:'Дипломная работа',master_thesis:'Магистерская диссертация',phd_dissertation:'Докторская диссертация',scientific_article:'Научная статья',research_report:'Научный отчёт',university_publication:'Издание университета',thesis_abstract:'Автореферат'};
 const repositoryFields:Record<string,string>={faculty:'Факультет',department:'Кафедра',educational_programme:'Специальность',supervisor:'Научный руководитель',udc_code:'УДК',university:'Университет',doi:'DOI',source:'Источник',rights_holder:'Правообладатель',licence_type:'Лицензия'};
 const text=computed(()=>editor.value?.data.translations[locale.value]);
-function title(item:any){return item.data.translations.ru?.title||item.data.translations.kk?.title||item.data.translations.en?.title||item.slug;}
+function title(item:any){if(item.kind==='pages')return websiteSchema.value[item.slug]?.label||item.slug;return item.data.translations.ru?.title||item.data.translations.kk?.title||item.data.translations.en?.title||item.slug;}
 async function run(fn:()=>Promise<void>){busy.value=true;error.value='';message.value='';try{await fn();}catch(e){error.value=String(e).replace(/^Error: /,'');}finally{busy.value=false;}}
-async function load(){const r=await props.api(`/site-content?kind=${kind.value}&page=${page.value}&q=${encodeURIComponent(q.value)}`);items.value=r.items;total.value=r.total;}
-function open(item?:any){editor.value=item?JSON.parse(JSON.stringify(item)):{kind:kind.value,slug:'',status:'draft',published_at:null,data:{translations:{},featured:false,url:'',resource_type:'open_access',access_type:'open',category:'',authors:[],keywords:[],content_types:[],audiences:[],work_type:'scientific_article',language:'ru',access_policy:'metadata_only'},assets:{}};for(const l of Object.keys(languages))editor.value.data.translations[l]??={title:'',description:'',body:'',instructions:'',venue:'',image_alt:''};locale.value='ru';baseline.value=JSON.stringify(editor.value);error.value='';message.value='';}
+async function load(){if(kind.value==='pages'&&!Object.keys(websiteSchema.value).length)websiteSchema.value=await props.api('/site-content/website-schema');const r=await props.api(`/site-content?kind=${kind.value}&page=${page.value}&q=${encodeURIComponent(q.value)}`);items.value=r.items;total.value=r.total;}
+function open(item?:any){editor.value=item?JSON.parse(JSON.stringify(item)):{kind:kind.value,slug:kind.value==='people'?'person-'+(crypto.randomUUID?.()||Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)):'',status:'draft',published_at:null,data:{translations:{},show_contacts:true,show_leadership:false,sort_order:0,email:'',phone:'',extension:'',featured:false,url:'',resource_type:'open_access',access_type:'open',category:'',authors:[],keywords:[],content_types:[],audiences:[],work_type:'scientific_article',language:'ru',access_policy:'metadata_only'},assets:{}};for(const l of Object.keys(languages))editor.value.data.translations[l]??={title:'',description:'',body:'',instructions:'',venue:'',image_alt:'',role:'',source_label:''};locale.value='ru';baseline.value=JSON.stringify(editor.value);error.value='';message.value='';}
+async function remove(){const e=editor.value;if(!window.confirm(`Удалить «${title(e)}»? Карточка и её файлы исчезнут с сайта.`))return;await run(async()=>{await props.api(`/site-content/${e.id}?version=${e.version}`,'DELETE');editor.value=null;await load();message.value='Карточка удалена.';});}
 function close(){if(JSON.stringify(editor.value)!==baseline.value&&!window.confirm('Закрыть без сохранения изменений?'))return;editor.value=null;error.value='';}
-async function save(){await run(async()=>{const e=editor.value;if(e.data.year==='')e.data.year=null;const saved=await props.api('/site-content'+(e.id?'/'+e.id:''),e.id?'PUT':'POST',{kind:e.kind,slug:e.slug,status:e.status,version:e.version,published_at:e.published_at||null,data:e.data});open(saved);await load();message.value=saved.status==='published'?'Сохранено. Материал доступен на сайте после наступления даты публикации.':'Материал сохранён.';});}
+async function save(){await run(async()=>{const e=editor.value;if(e.data.year==='')e.data.year=null;const saved=await props.api('/site-content'+(e.id?'/'+e.id:''),e.id?'PUT':'POST',{kind:e.kind,slug:e.slug,status:e.status,version:e.version,published_at:e.published_at||null,data:e.data});open(saved);await load();message.value=saved.kind==='pages'?'Страница сохранена. Изменения доступны на сайте.':saved.status==='published'?'Сохранено. Материал доступен на сайте после наступления даты публикации.':'Материал сохранён.';});}
 async function switchSection(k:string){if(navigation.go({tab:k}))return;if(editor.value){close();if(editor.value)return;}kind.value=k;page.value=1;q.value='';await run(load);}
 function changeList(key:string,event:Event){editor.value.data[key]=(event.target as HTMLTextAreaElement).value.split('\n').map(v=>v.trim()).filter(Boolean);}
 function localDate(value:string|null){if(!value)return '';const d=new Date(value);return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);}
@@ -30,26 +34,45 @@ useNavigationGuard('site',()=>!!editor.value&&!cleanEditor.value,()=>busy.value)
 
 <template>
 <section class="site-content">
- <header class="page-heading"><div><h1>Сайт библиотеки</h1><p>Материалы для посетителей. Публикации появятся на готовом сайте библиотеки.</p></div><button v-if="!editor" class="primary" @click="open()" :disabled="busy">+ Добавить</button></header>
+ <header class="page-heading"><div><h1>Сайт библиотеки</h1><p>Материалы для посетителей. Публикации появятся на готовом сайте библиотеки.</p></div><button v-if="!editor&&kind!=='pages'" class="primary" @click="open()" :disabled="busy">+ Добавить</button></header>
  <nav class="site-tabs" aria-label="Разделы сайта"><button v-for="(name,key) in sections" :key="key" :class="{selected:kind===key}" :disabled="busy" @click="switchSection(key)">{{name}}</button></nav>
  <p v-if="error" role="alert" class="error">{{error}}</p><p v-if="message" role="status" class="site-success">{{message}}</p>
- <template v-if="!editor">
+ <template v-if="!editor&&kind==='pages'">
+  <p class="muted">Выбери страницу. Здесь редактируются её тексты и списки на трёх языках. Сохранённые изменения сразу видны на сайте. Карточки людей находятся во вкладке «Сотрудники и руководство».</p>
+  <div class="site-pages"><button v-for="(definition,slug) in websiteSchema" :key="slug" :disabled="busy||!items.some(i=>i.slug===slug)" @click="open(items.find(i=>i.slug===slug))"><strong>{{definition.label}}</strong><small>{{pageLinks[slug]}}</small><small v-if="!items.some(i=>i.slug===slug)">Страница ещё не подключена к редактору</small><span v-else>Редактировать →</span></button></div>
+ </template>
+ <template v-else-if="!editor">
   <form class="site-search" @submit.prevent="page=1;run(load)"><input v-model="q" placeholder="Найти материал" aria-label="Поиск материалов"><button :disabled="busy">Найти</button><span>{{total}} материалов</span></form>
-  <div class="site-card"><table><thead><tr><th>Название</th><th>Состояние</th><th>Адрес страницы</th><th></th></tr></thead><tbody><tr v-for="item in items" :key="item.id"><td>{{title(item)}}</td><td>{{statuses[item.status]}}</td><td>{{item.slug}}</td><td><button @click="open(item)" :disabled="busy">Открыть</button></td></tr><tr v-if="!items.length"><td colspan="4">Пока нет материалов. Добавьте первую публикацию.</td></tr></tbody></table></div>
+  <div class="site-card"><table><thead><tr><th>Название</th><th>Состояние</th><th>{{kind==='people'?'Показывать в разделах':'Адрес страницы'}}</th><th></th></tr></thead><tbody><tr v-for="item in items" :key="item.id"><td>{{title(item)}}</td><td>{{statuses[item.status]}}</td><td v-if="kind==='people'">{{[item.data.show_contacts?'Контакты':'',item.data.show_leadership?'Руководство':''].filter(Boolean).join(', ')||'Не выбран раздел'}}</td><td v-else>{{item.slug}}</td><td><button @click="open(item)" :disabled="busy">Открыть</button></td></tr><tr v-if="!items.length"><td colspan="4">Пока нет материалов. Добавьте первую публикацию.</td></tr></tbody></table></div>
   <div class="site-search"><button :disabled="busy||page===1" @click="page--;run(load)">Назад</button><span>Страница {{page}}</span><button :disabled="busy||page*30>=total" @click="page++;run(load)">Далее</button></div>
  </template>
  <form v-else @submit.prevent="save" class="site-card site-editor">
   <div class="site-search"><h2>{{editor.id?'Редактирование':'Новый материал'}} · {{sections[kind]}}</h2><button type="button" @click="close" :disabled="busy">К списку</button></div>
-  <fieldset :disabled="busy"><div class="site-grid">
-   <label>Адрес страницы (латиница, цифры, дефис)<input v-model="editor.slug" required maxlength="160" pattern="[a-z0-9][a-z0-9-]*" placeholder="library-news-2026"></label>
+  <fieldset :disabled="busy">
+  <template v-if="kind==='pages'">
+   <h3>{{title(editor)}}</h3>
+   <nav class="site-tabs" aria-label="Язык страницы"><button type="button" v-for="(name,key) in languages" :class="{selected:locale===key}" @click="locale=key">{{name}}</button></nav>
+   <p class="muted">Каждый язык редактируется отдельно. Удаление строки применяется после сохранения страницы.</p>
+   <WebsiteFields v-if="websiteSchema[editor.slug]" :schema="websiteSchema[editor.slug].schema" v-model="editor.data.page_content" :locale="locale"/>
+  </template>
+  <template v-else>
+  <div class="site-grid">
+   <label v-if="kind!=='people'">Адрес страницы (латиница, цифры, дефис)<input v-model="editor.slug" required maxlength="160" pattern="[a-z0-9][a-z0-9-]*" placeholder="library-news-2026"></label>
    <label>Состояние<select v-model="editor.status"><option v-for="(name,key) in statuses" :value="key">{{name}}</option></select></label>
    <label>Дата публикации<input type="datetime-local" :value="localDate(editor.published_at)" @input="setDate('published_at',$event)"><small>Пусто — при публикации. Будущая дата откладывает показ на сайте.</small></label>
-   <label class="site-checkbox"><input type="checkbox" v-model="editor.data.featured">Показывать на главной / выделить</label>
+   <label v-if="kind!=='people'" class="site-checkbox"><input type="checkbox" v-model="editor.data.featured">Показывать на главной / выделить</label>
   </div>
   <nav class="site-tabs" aria-label="Язык материала"><button type="button" v-for="(name,key) in languages" :class="{selected:locale===key}" @click="locale=key">{{name}}</button></nav>
   <p class="muted">Достаточно заполнить один язык. На сайте при отсутствии перевода будет показан имеющийся текст.</p>
-  <label>Название · {{languages[locale]}}<input v-model="text.title" maxlength="500"></label>
-  <label>{{kind==='repository'?'Аннотация':'Краткое описание'}}<textarea v-model="text.description" rows="3" maxlength="5000"></textarea></label>
+  <label>{{kind==='people'?'ФИО':'Название'}} · {{languages[locale]}}<input v-model="text.title" maxlength="500"></label>
+  <label>{{kind==='repository'?'Аннотация':kind==='people'?'Обязанности / направление работы':'Краткое описание'}}<textarea v-model="text.description" rows="3" maxlength="5000"></textarea></label>
+  <template v-if="kind==='people'">
+   <label>Должность<input v-model="text.role" maxlength="500"></label>
+   <label>Биография / подробная информация для руководства<textarea v-model="text.body" rows="5" maxlength="100000"/></label>
+   <label>Подпись официального источника<input v-model="text.source_label" maxlength="500"></label>
+   <div class="site-grid"><label>Электронная почта<input type="email" v-model="editor.data.email" maxlength="254"></label><label>Телефон<input v-model="editor.data.phone" maxlength="100"></label><label>Внутренний номер<input v-model="editor.data.extension" maxlength="30"></label><label>Порядок отображения<input type="number" min="0" max="99999" v-model.number="editor.data.sort_order"><small>Меньшие номера показываются выше.</small></label><label>Официальный источник (необязательно)<input type="url" v-model="editor.data.url" maxlength="2000"></label></div>
+   <div class="site-grid"><label class="site-checkbox"><input type="checkbox" v-model="editor.data.show_contacts">Показывать в контактах</label><label class="site-checkbox"><input type="checkbox" v-model="editor.data.show_leadership">Показывать в руководстве</label></div>
+  </template>
   <template v-if="kind==='news'||kind==='events'"><label>Текст публикации<textarea v-model="text.body" rows="10" maxlength="100000"></textarea><small>Абзацы разделяйте пустой строкой.</small></label><label>Описание изображения<input v-model="text.image_alt" maxlength="500"></label></template>
   <label v-if="kind==='resources'">Условия и инструкция доступа<textarea v-model="text.instructions" rows="4" maxlength="10000"></textarea></label>
   <label v-if="kind==='events'">Место проведения<input v-model="text.venue" maxlength="500"></label>
@@ -72,13 +95,15 @@ useNavigationGuard('site',()=>!!editor.value&&!cleanEditor.value,()=>busy.value)
    <label>Не открывать PDF до<input type="datetime-local" :value="localDate(editor.data.embargo_until)" @input="setDate('embargo_until',$event)"></label>
   </div>
   <div v-if="editor.id" class="site-files"><h3>Файлы</h3><p v-if="!cleanEditor" class="muted">Сначала сохраните изменения текста, затем прикрепите файл.</p><label>Изображение (до 8 МБ)<input type="file" accept="image/jpeg,image/png,image/webp" :disabled="!cleanEditor" @change="upload('image',$event)"></label><div v-if="editor.assets.image">Изображение загружено · <a :href="`/api/site-content/${editor.id}/assets/image`" target="_blank" rel="noopener">Просмотреть</a> <button type="button" :disabled="!cleanEditor" @click="removeAsset('image')">Убрать</button></div><template v-if="kind==='repository'"><label>Полный текст PDF (до 25 МБ)<input type="file" accept="application/pdf" :disabled="!cleanEditor" @change="upload('pdf',$event)"></label><div v-if="editor.assets.pdf">PDF загружен · {{Math.ceil(editor.assets.pdf.size/1024)}} КБ · <a :href="`/api/site-content/${editor.id}/assets/pdf`" target="_blank" rel="noopener">Просмотреть</a> <button type="button" :disabled="!cleanEditor" @click="removeAsset('pdf')">Убрать</button></div></template></div>
-  <p v-else class="muted">После первого сохранения можно загрузить изображение и PDF работы.</p>
+  <p v-else class="muted">После первого сохранения можно загрузить {{kind==='people'?'фотографию':kind==='repository'?'изображение и PDF работы':'изображение'}}.</p>
+  </template>
   <button class="primary" :disabled="busy">{{busy?'Сохранение…':'Сохранить'}}</button>
+  <button v-if="editor.id&&kind!=='pages'" type="button" class="site-delete" :disabled="busy" @click="remove">Удалить {{kind==='people'?'карточку':'материал'}}</button>
   </fieldset>
  </form>
 </section>
 </template>
 
 <style scoped>
-.page-heading,.site-search{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}.site-tabs{display:flex;gap:8px;border-bottom:1px solid #dce5ed;padding:14px 0;margin-bottom:20px}.site-tabs .selected{background:#00233e;color:white}.site-card{border:1px solid #dce5ed;background:white;border-radius:20px;overflow:auto;margin:20px 0}.site-editor{padding:28px}.site-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.site-editor label{display:flex;flex-direction:column;gap:8px;margin-bottom:20px;font-weight:600}.site-editor input,.site-editor select,.site-editor textarea{width:100%;box-sizing:border-box}.site-editor .site-checkbox{flex-direction:row;align-items:center}.site-checkbox input{width:auto}.site-editor fieldset{border:0;padding:0;min-width:0}.site-editor small,.muted{font-weight:400;color:#66758b}.site-files{border-top:1px solid #dce5ed;padding-top:18px;margin:20px 0}.site-success{background:#eafbf2;color:#146443;padding:14px;border-radius:12px}.site-content table{width:100%}.site-content th,.site-content td{text-align:left;padding:18px;border-bottom:1px solid #e4ebf2}.site-content th{background:#f3f6fa}.site-search input{min-width:260px;flex:1}@media(max-width:800px){.site-grid{grid-template-columns:1fr}.site-tabs{flex-wrap:wrap}.site-editor{padding:16px}}
+.site-pages{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;margin-top:24px}.site-pages button{display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:14px;padding:22px;border:1px solid #dce5ed;border-radius:14px;background:white}.site-pages small{color:#66758b}.site-delete{margin-left:18px;color:#a42121}.site-tabs{flex-wrap:wrap}.page-heading,.site-search{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}.site-tabs{display:flex;gap:8px;border-bottom:1px solid #dce5ed;padding:14px 0;margin-bottom:20px}.site-tabs .selected{background:#00233e;color:white}.site-card{border:1px solid #dce5ed;background:white;border-radius:20px;overflow:auto;margin:20px 0}.site-editor{padding:28px}.site-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.site-editor label{display:flex;flex-direction:column;gap:8px;margin-bottom:20px;font-weight:600}.site-editor input,.site-editor select,.site-editor textarea{width:100%;box-sizing:border-box}.site-editor .site-checkbox{flex-direction:row;align-items:center}.site-checkbox input{width:auto}.site-editor fieldset{border:0;padding:0;min-width:0}.site-editor small,.muted{font-weight:400;color:#66758b}.site-files{border-top:1px solid #dce5ed;padding-top:18px;margin:20px 0}.site-success{background:#eafbf2;color:#146443;padding:14px;border-radius:12px}.site-content table{width:100%}.site-content th,.site-content td{text-align:left;padding:18px;border-bottom:1px solid #e4ebf2}.site-content th{background:#f3f6fa}.site-search input{min-width:260px;flex:1}@media(max-width:800px){.site-grid{grid-template-columns:1fr}.site-tabs{flex-wrap:wrap}.site-editor{padding:16px}}
 </style>

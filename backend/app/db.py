@@ -1,5 +1,6 @@
 import os
-from sqlalchemy import create_engine, JSON, String, Integer, Text
+from sqlalchemy import create_engine, JSON, String, Integer, Text, Boolean, LargeBinary
+from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 engine=create_engine(os.getenv('DATABASE_URL','postgresql+psycopg://catalog:catalog@db/catalog'))
@@ -18,6 +19,22 @@ class Record(Base):
     marc: Mapped[dict]=mapped_column(JSON().with_variant(JSONB,'postgresql'))
     search_text: Mapped[str]=mapped_column(Text)
     primary_specialty: Mapped[str|None]=mapped_column(Text,nullable=True)
+    is_faculty_work: Mapped[bool]=mapped_column(Boolean,default=False,server_default='false')
+    use_first_page_cover: Mapped[bool]=mapped_column(Boolean,default=False,server_default='false')
+    digital_file: Mapped['CatalogFile|None']=relationship(lazy='selectin',passive_deletes=True)
+
+class CatalogFile(Base):
+    __tablename__='catalog_files'
+    id: Mapped[str]=mapped_column(String(36),primary_key=True)
+    record_id: Mapped[int|None]=mapped_column(__import__('sqlalchemy').ForeignKey('records.id',ondelete='CASCADE'),unique=True,nullable=True)
+    owner_id: Mapped[int]=mapped_column(__import__('sqlalchemy').ForeignKey('users.id'),index=True)
+    created_at: Mapped[__import__('datetime').datetime]=mapped_column(__import__('sqlalchemy').DateTime(timezone=True))
+    name: Mapped[str]=mapped_column(String(255))
+    size: Mapped[int]=mapped_column(Integer)
+    pages: Mapped[int]=mapped_column(Integer)
+    content: Mapped[bytes]=mapped_column(LargeBinary,deferred=True)
+    cover: Mapped[bytes]=mapped_column(LargeBinary,deferred=True)
+
 class VocabularyEntry(Base):
     __tablename__='vocabulary_entries'
     __table_args__=(__import__('sqlalchemy').UniqueConstraint('type_id','tag','code','value_key',name='uq_vocabulary_value'),)

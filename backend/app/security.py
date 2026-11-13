@@ -155,6 +155,8 @@ def permission_for(method,path):
     if path.startswith('/api/ksu/'): return 'ksu.view' if method=='GET' else 'ksu.edit'
     if path.startswith('/api/acquisitions'): return 'acquisitions.view' if method=='GET' else ('acquisitions.cancel' if path.endswith('/cancel') else 'acquisitions.edit')
     if path.startswith('/api/withdrawals'): return 'withdrawals.view' if method=='GET' else 'withdrawals.create'
+    if path=='/api/catalog-files' or path.startswith('/api/catalog-files/'):
+        return 'catalog.view' if method=='GET' else 'catalog.edit'
     if path.startswith('/api/copies/'): return 'catalog.view' if method=='GET' else 'copies.edit'
     if re.fullmatch(r'/api/records/\d+/copies',path): return 'catalog.view' if method=='GET' else 'copies.edit'
     if path=='/api/records' or re.fullmatch(r'/api/records/\d+(?:/marcsql-source|/description)?',path):
@@ -172,7 +174,7 @@ def auth(request:Request,s=Depends(get_db)):
         return None
     user=identity(request,s)
     permission=permission_for(request.method,request.url.path)
-    if (request.method not in ('GET','HEAD','OPTIONS') and request.url.path not in ('/api/book-photos/analyze','/api/catalog-search/records')
+    if (request.method not in ('GET','HEAD','OPTIONS') and request.url.path not in ('/api/book-photos/analyze','/api/catalog-search/records','/api/catalog-files')
             and not request.url.path.startswith('/api/photo-transfer/')):
         lock(s,'circulation-stock-gate')
     if permission=='circulation.options':

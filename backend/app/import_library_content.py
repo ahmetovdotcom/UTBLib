@@ -16,7 +16,7 @@ ACTION = 'import_library_public'
 
 
 def prepare(document):
-    if document.get('format') != 'library-public-v1' or not isinstance(document.get('items'), list):
+    if document.get('format') not in ('library-public-v1', 'library-website-v1') or not isinstance(document.get('items'), list):
         raise ValueError('Expected library-public-v1 export')
     items, seen = [], set()
     for raw in document['items']:
@@ -27,7 +27,8 @@ def prepare(document):
         payload = ContentInput.model_validate(raw)
         if payload.status != 'published' or not payload.published_at or payload.published_at > utcnow():
             raise ValueError('Only already published material can be migrated')
-        if payload.kind not in ('news', 'events', 'resources'):
+        allowed = ('pages', 'people') if document['format'] == 'library-website-v1' else ('news', 'events', 'resources')
+        if payload.kind not in allowed:
             raise ValueError('Repository access policies require a separate migration')
         key = payload.kind, payload.slug
         if key in seen:

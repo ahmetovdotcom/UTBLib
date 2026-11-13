@@ -4,7 +4,7 @@ export type MF={tag:string,value?:string,ind1?:string,ind2?:string,subfields?:SF
 export type Spec={local?:boolean,tag:string,label:string,repeatable:boolean,obsolete:boolean,documentation:string,indicators:{position:number,label:string,values:{code:string,label:string}[]}[],subfields:{code:string,label:string,repeatable:boolean}[]};
 export type Config={repeatable?:boolean|null,subfield_repeatable?:Record<string,boolean>,vocabularies?:Record<string,{auto_add:boolean,allow_edit?:boolean}>,local?:boolean,tag:string,label:string,required:boolean,subfields:string[]};
 export type DT={id:number,name:string,config:Config[]};
-export type RecordData={primary_specialty?:string|null,id?:number,type_id:number,version?:number,marc:{leader:string,fields:MF[]}};
+export type RecordData={is_faculty_work?:boolean,use_first_page_cover?:boolean,digital_upload?:string|null,electronic_file?:{name:string,size:number,pages:number}|null,primary_specialty?:string|null,id?:number,type_id:number,version?:number,marc:{leader:string,fields:MF[]}};
 // UI-only empty rows never overwrite a stored MARC field or enter the saved record.
 const generated=new WeakSet<object>(), generatedSubfields=new WeakSet<object>();
 export const common:Record<string,string[]>={
@@ -40,7 +40,8 @@ export function prepareRecord(record:RecordData,type:DT|undefined,specs:Record<s
 export function specialtyChoices(record:RecordData){return [...new Set(record.marc.fields.filter(f=>f.tag==='952').flatMap(f=>(f.subfields||[]).filter(s=>s.code==='j').map(s=>s.value.trim())).filter(Boolean))];}
 export function primarySpecialty(record:RecordData){const values=specialtyChoices(record),selected=record.primary_specialty?.trim();return selected&&values.includes(selected)?selected:values.length===1?values[0]:null;}
 export function cleanRecord(record:RecordData):RecordData{
- return {...record,...(record.primary_specialty!==undefined||primarySpecialty(record)?{primary_specialty:primarySpecialty(record)}:{}),marc:{leader:record.marc.leader,fields:record.marc.fields.filter(f=>{
+ const {electronic_file,...savedRecord}=record;
+ return {...savedRecord,...(record.primary_specialty!==undefined||primarySpecialty(record)?{primary_specialty:primarySpecialty(record)}:{}),marc:{leader:record.marc.leader,fields:record.marc.fields.filter(f=>{
   if(!generated.has(toRaw(f)))return true;
   return f.value?.trim()||(f.subfields||[]).some(s=>s.value.trim()&&!(f.tag==='084'&&s.code==='2'&&s.value==='rubbk'));
  }).map(f=>f.subfields?{...f,subfields:f.subfields.filter(s=>!generatedSubfields.has(toRaw(s))||s.value!=='').map(s=>({...s}))}:{...f})}};

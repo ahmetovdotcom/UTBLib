@@ -71,7 +71,7 @@ def test_availability_tracks_issue_return_reservation_and_restrictions(client):
 def test_linked_acquisition_copies_filters_and_cache_refresh(client):
     _, copies, rid = seed(1)
     with session() as s:
-        branch = Branch(code='TEST-DESK', name='Тестовый зал'); s.add(branch); s.flush()
+        branch = s.query(Branch).filter_by(code='TEST-DESK').one()
         acq = Acquisition(request_key=str(uuid4()), payload_hash='x', invoice='PRIVATE_INVOICE', received_on=utcnow().date(), source='PRIVATE_VENDOR')
         s.add(acq); s.flush()
         line = AcquisitionLine(acquisition_id=acq.id, record_id=rid, title_snapshot='Книга', quantity=1, currency='KZT', sigla='PRIVATE_STORAGE')

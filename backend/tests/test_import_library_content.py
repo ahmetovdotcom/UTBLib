@@ -83,3 +83,24 @@ def test_configuration_preserves_unrelated_secrets_and_reuses_key():
     assert module.plan(utb, configured) == (utb, configured)
     with pytest.raises(ValueError, match='differs'):
         module.plan(utb, configured.replace(module.values(utb)['STUDENT_BRIDGE_KEY'], 'different'*8))
+
+
+def test_website_import_keeps_edited_pages_and_deleted_people(client):
+    from app.website_content import WEBSITE_SCHEMA, empty_node
+    data = {'format': 'library-website-v1', 'items': [
+        {'kind': 'pages', 'slug': 'contacts', 'status': 'published', 'published_at': utcnow().isoformat(),
+         'data': {'translations': {'ru': {'title': 'Контакты'}}, 'page_content': empty_node(WEBSITE_SCHEMA['contacts']['schema'])}},
+        {'kind': 'people', 'slug': 'staff-one', 'status': 'published', 'published_at': utcnow().isoformat(),
+         'data': {'translations': {'ru': {'title': 'Тестовый сотрудник'}}, 'show_contacts': True}},
+    ]}
+    with session() as s:
+        assert import_content(s, data)['new'] == 2
+        assert s.scalar(select(func.count()).select_from(SiteContent)) == 0
+        assert import_content(s, data, True)['new'] == 2
+        person = s.scalar(select(SiteContent).where(SiteContent.kind == 'people'))
+        person.status = 'deleted'
+        page = s.scalar(select(SiteContent).where(SiteContent.kind == 'pages'))
+        page.data = {**page.data, 'page_content': {'edited': True}}
+        s.commit()
+        assert import_content(s, data, True)['new'] == 0
+        assert person.status == 'deleted' and page.data['page_content'] == {'edited': True}

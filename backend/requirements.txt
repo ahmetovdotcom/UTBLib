@@ -13,3 +13,4 @@ Pillow==11.2.1
 PyMySQL==1.1.1
 ldap3==2.9.1
 qrcode==8.2
+pypdfium2==5.7.0

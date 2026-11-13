@@ -77,8 +77,10 @@ def project(record, types):
         'partNumber': f('245', 'n'), 'partTitle': f('245', 'p'),
         'ksuLiteratureType': f('952', 'a'), 'faculty': f('952', 'd'),
         'department': f('952', 'e'), 'disciplines': f('952', 'i'), 'specialty': f('952', 'j'),
-        # URLs, notes and attachments are not public until a publication policy exists.
-        'coverPath': None, 'electronicMaterials': [], 'relatedMaterials': [], 'similarMaterials': [],
+        # MARC URLs and staff notes are never published. Uploaded faculty PDFs require a signed university session.
+        'isFacultyWork': bool(record.is_faculty_work), 'loginRequired': bool(record.is_faculty_work),
+        'coverPath': f'/utblib-books/{record.id}/cover' if record.is_faculty_work and record.use_first_page_cover and record.digital_file else None,
+        'electronicFile': {'pages':record.digital_file.pages,'size':record.digital_file.size} if record.is_faculty_work and record.digital_file else None, 'electronicMaterials': [], 'relatedMaterials': [], 'similarMaterials': [],
         'viewer': {'authenticated': False, 'canReserve': False, 'reservationEligible': False, 'activeLoan': None},
         '_id': record.id, '_languages': langs, '_isbns': [isbn_key(x) for x in v('020', 'a')], '_category': category,
     }
@@ -88,7 +90,7 @@ def project(record, types):
 
 
 def metadata(s):
-    """Cache only public projections; refresh changed records by their existing version."""
+    """Cache whitelisted bibliography; redact faculty details at every public response."""
     engine = s.get_bind()
     with _lock:
         types = dict(s.execute(select(DocumentType.id, DocumentType.name)).all())
@@ -145,14 +147,31 @@ def indicators(stock):
             'accessRestriction': 'limited' if stock.get('limited') else 'reading_room' if stock.get('reading_room') else 'free'}
 
 
-def present(book, stock):
+def present(book, stock, full=False):
+    if book.get('isFacultyWork') and not full:
+        # Stable shape for catalogue cards, but never expose full metadata publicly.
+        allowed={'id','source','title','primaryAuthor','authors','publicationYear','annotation','coverPath','isFacultyWork','resourceType'}
+        brief={k:v for k,v in book.items() if k in allowed or k.startswith('_')}
+        brief.update(loginRequired=True,publisher={'name':''},isbn={'raw':''},udc={'raw':'','display':''},
+            language={'code':'','label':''},keywords=[],subjects=[],electronicMaterials=[],
+            viewer={'authenticated':False,'canReserve':False,'reservationEligible':False},
+            copies={'available':0,'issued':0,'total':0},indicators={'format':'metadata_only','availability':'no_holdings'},
+            availability={'isAvailable':False,'availableCopies':0,'issuedCopies':0,'totalCopies':0,'locations':[]})
+        return {k:v for k,v in brief.items() if not k.startswith('_')}
+
+    book={**book,'loginRequired':False}
     counts = {k: stock.get(k, 0) for k in ('available', 'issued', 'total')}
-    return {**{k: v for k, v in book.items() if not k.startswith('_')}, 'copies': counts, 'indicators': indicators(stock),
+    state=indicators(stock)
+    if book.get('electronicFile'):
+        state['format']='hybrid' if counts['total'] else 'electronic'
+        if not counts['total']: state['availability']='electronic_only'
+    return {**{k: v for k, v in book.items() if not k.startswith('_')}, 'copies': counts, 'indicators': state,
             'availability': {'isAvailable': counts['available'] > 0, 'availableCopies': counts['available'],
                              'issuedCopies': counts['issued'], 'totalCopies': counts['total'], 'locations': stock.get('locations', [])}}
 
 
 class Search(BaseModel):
+    faculty_works_only: bool = False
     q: str = Field('', max_length=255)
     title: str = Field('', max_length=255)
     author: str = Field('', max_length=255)
@@ -188,6 +207,7 @@ def search(s, p):
     rows = []
     split = lambda value: {x.strip() for x in value.split(',') if x.strip()}
     for b in metadata(s):
+        if p.faculty_works_only and not b.get('isFacultyWork'): continue
         c = stock.get(b['_id'], {})
         if any(t not in b['_search'] for t in p.q.strip().casefold().split()): continue
         if p.title.casefold() not in b['title']['display'].casefold(): continue
@@ -203,8 +223,11 @@ def search(s, p):
         if p.year_to and (year is None or year > p.year_to): continue
         if p.available_only and not c.get('available'): continue
         if (p.physical_only or p.material_type == 'physical' or p.format == 'print') and not c.get('total'): continue
-        # Electronic publication, archive collections and fund mappings are not provided by this integration.
-        if p.material_type in ('digital', 'archive') or p.format in ('electronic', 'hybrid') or p.fund: continue
+        electronic=bool(b.get('electronicFile'))
+        if p.material_type=='digital' and not electronic: continue
+        if p.material_type=='archive' or p.fund: continue
+        if p.format=='electronic' and (not electronic or c.get('total')): continue
+        if p.format=='hybrid' and (not electronic or not c.get('total')): continue
         if p.resource_type and b['resourceType'] not in split(p.resource_type): continue
         if p.category and b['_category'] not in split(p.category): continue
         branches = {x['servicePoint']['code'] for x in c.get('locations', [])}
@@ -212,7 +235,9 @@ def search(s, p):
         if p.institution and not branches.intersection(INSTITUTIONS.get(p.institution, ())): continue
         if p.availability:
             if p.availability == 'no_holdings' and c.get('total'): continue
-            if p.availability != 'no_holdings' and not c.get(p.availability): continue
+            if p.availability=='electronic_only':
+                if not electronic or c.get('total'): continue
+            elif p.availability != 'no_holdings' and not c.get(p.availability): continue
         rows.append(b)
     if p.sort in ('newest', 'oldest'):
         rows.sort(key=lambda b: (b['publicationYear'] is None, (b['publicationYear'] or 0) * (-1 if p.sort == 'newest' else 1), b['_id']))
@@ -235,8 +260,8 @@ def catalog(params: Search = Query(), s=Depends(get_db)):
 
 
 @router.get('/facets')
-def facets(s=Depends(get_db)):
-    books, stock = metadata(s), inventory(s)
+def facets(faculty_works_only:bool=False,s=Depends(get_db)):
+    books, stock = [b for b in metadata(s) if not faculty_works_only or b.get('isFacultyWork')], inventory(s)
     def count(items):
         return [{'value': k, 'count': n} for k, n in sorted(Counter(items).items()) if k]
     years = [b['publicationYear'] for b in books if b['publicationYear']]
@@ -250,7 +275,8 @@ def facets(s=Depends(get_db)):
             'availability': [{'value': key, 'count': sum(bool(stock.get(b['_id'], {}).get(key)) for b in books)}
                              for key in ('available', 'issued', 'processing', 'repair')] +
                             [{'value': 'no_holdings', 'count': sum(not stock.get(b['_id'], {}).get('total') for b in books)}],
-            'formats': [{'value': 'print', 'count': sum(bool(stock.get(b['_id'], {}).get('total')) for b in books)}],
+            'formats': count('hybrid' if stock.get(b['_id'],{}).get('total') else 'electronic' for b in books if b.get('electronicFile')) +
+                       [{'value':'print','count':sum(bool(stock.get(b['_id'],{}).get('total')) for b in books if not b.get('electronicFile'))}],
             'years': {'min': min(years, default=date.today().year), 'max': max(years, default=date.today().year)}, 'total': len(books)}
 
 
