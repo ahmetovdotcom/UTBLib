@@ -53,7 +53,7 @@ function print(){if(ready.value&&!overflow.value&&selectedCopies.value.length&&l
 </section>
 <p v-if="copies.length&&!selectedCopies.length" role="status">Выберите хотя бы один экземпляр для печати.</p>
 <p v-if="selectedCopies.length&&layout.value" aria-live="polite">Бланков: {{selectedCopies.length}} · До {{layout.value.perPage}} на листе · Листов: {{Math.ceil(selectedCopies.length/layout.value.perPage)}}.</p>
-<p>Слева вверху — полочный индекс (090$a), а если он отсутствует — УДК (080$a). Под ним — авторский знак (090$x), если он заполнен в карточке. Цена берётся из экземпляра; «—» означает, что она не указана.</p>
+<p>В верхней строке по центру — инвентарный номер, слева — полочный индекс (090$a), а если он отсутствует — УДК (080$a). Под ним — авторский знак (090$x), если он заполнен в карточке. Цена берётся из экземпляра; «—» означает, что она не указана.</p>
 <p v-if="overflow" role="alert" class="inline-error">Текст не помещается в один из бланков. Увеличьте ширину или высоту.</p>
 <p>В окне печати выберите A4, масштаб 100% и поля «Нет». Если остаются дата, адрес сайта или номера страниц, отключите «Колонтитулы» (Headers and footers).</p>
 <div class="modal-actions"><button type="button" @click="close">Закрыть</button><button type="button" class="primary" :disabled="busy||!ready||overflow||!!layout.error||!selectedCopies.length" @click="print">Печатать / сохранить PDF</button></div>
