@@ -42,7 +42,9 @@ def test_website_pages_languages_lists_versions_and_boundaries(client):
     for target, value in [('instagram_url','javascript:alert(1)'),('instagram_url','//bad.test'),('location_email','bad@email'),('unexpected','bad')]:
         invalid=page(); invalid['data']['page_content']['ru'][target]=value
         assert client.post('/api/site-content',json=invalid).status_code == 422
-    invalid=page('header');invalid['data']['page_content']['ru']['links']=[['home','Main','https://external.test']]
+    valid=page('header');valid['data']['page_content']['ru']['links']=[['repository','Репозиторий','https://repository.kaztbu.edu.kz/']]
+    assert client.post('/api/site-content',json=valid).status_code == 201
+    invalid=page('header');invalid['data']['page_content']['ru']['links']=[['home','Main','javascript:alert(1)']]
     assert client.post('/api/site-content',json=invalid).status_code == 422
     invalid=page('header');invalid['data']['page_content']['ru']['links']=[['home']]
     assert client.post('/api/site-content',json=invalid).status_code == 422

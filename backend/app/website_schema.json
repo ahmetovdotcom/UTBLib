@@ -2003,7 +2003,7 @@
                   "nullable": false,
                   "max": 10000,
                   "multiline": false,
-                  "format": "path"
+                  "format": "link"
                 }
               ]
             },
@@ -2036,7 +2036,7 @@
                   "nullable": false,
                   "max": 10000,
                   "multiline": false,
-                  "format": "path"
+                  "format": "link"
                 }
               ]
             },
@@ -2091,7 +2091,7 @@
                   "nullable": false,
                   "max": 10000,
                   "multiline": false,
-                  "format": "path"
+                  "format": "link"
                 }
               ]
             },
