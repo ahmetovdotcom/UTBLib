@@ -36,7 +36,7 @@ function remove(){props.record.digital_upload=null;props.record.electronic_file=
 <section class="publication card">
  <label class="check"><input v-model="record.is_faculty_work" type="checkbox" :disabled="readonly||disabled||uploading"> Труды ППС</label>
  <template v-if="record.is_faculty_work||record.electronic_file">
-  <p class="hint">Отмеченная запись появится в разделе «Труды сотрудников». Краткое описание доступно всем; полная карточка и чтение книги — после входа.</p>
+  <p class="hint">Отмеченная запись появится в разделе «Труды ППС». Краткое описание доступно всем; полная карточка и чтение книги — после входа.</p>
   <div v-if="record.electronic_file" class="file"><strong>{{record.electronic_file.name}}</strong><span>{{record.electronic_file.pages}} стр. · {{(record.electronic_file.size/1024/1024).toFixed(1)}} МБ</span><button v-if="!readonly" type="button" class="danger-link" :disabled="disabled||uploading" @click="remove">Убрать файл</button></div>
   <label v-if="!readonly" class="upload">{{record.electronic_file?'Заменить электронную книгу (PDF, до 1 ГБ)':'Загрузить электронную книгу (PDF, до 1 ГБ)'}}<input type="file" accept="application/pdf,.pdf" :disabled="disabled||uploading" @change="upload"></label>
   <div v-if="uploading" class="file" role="status"><span>{{progress<100?`Передача PDF — ${progress}%`:'Проверка PDF и подготовка обложки…'}}</span><button type="button" @click="activeUpload?.abort()">Отменить загрузку</button></div>
