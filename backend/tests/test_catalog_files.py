@@ -6,11 +6,12 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from PIL import Image
-from sqlalchemy import select
+import pytest
+from sqlalchemy import select, func
 
 from test_catalog import client,make_type,payload,field
 from test_circulation import session
-from app.db import CatalogFile, Record
+from app.db import CatalogFile, CatalogFileChunk, Record
 from app.main import app
 
 
@@ -91,6 +92,7 @@ def test_upload_validation_csrf_permissions_and_record_conflict(client):
     result=client.put('/api/records/'+str(rid),json=edit);assert result.status_code==200,result.text
     assert result.json()['electronic_file'] is None
     with session() as s: assert s.get(CatalogFile,replacement) is None
+    with session() as s: assert s.scalar(select(func.count()).select_from(CatalogFileChunk))==0
 
 
 def test_foreign_upload_and_failed_save_do_not_publish(client):
@@ -104,3 +106,59 @@ def test_foreign_upload_and_failed_save_do_not_publish(client):
     response=client.post('/api/records',json=body)
     assert response.status_code==409,response.text
     with session() as s: assert list(s.scalars(select(Record)))==[]
+
+
+@pytest.mark.parametrize('legacy',[False,True])
+def test_full_pdf_and_ranges_across_storage_chunks(client,monkeypatch,legacy):
+    from app import catalog_files
+    monkeypatch.setenv('STUDENT_BRIDGE_KEY','test-faculty-bridge-key-0123456789012345')
+    monkeypatch.setattr(catalog_files,'CHUNK_SIZE',1024)
+    original=pdf();token=upload(client)
+    with session() as s:
+        row=s.get(CatalogFile,token)
+        assert row.content==b'' and row.size==len(original)
+        assert s.scalar(select(func.count()).select_from(CatalogFileChunk))>1
+        if legacy:
+            row.content=original;row.chunk_size=0
+            s.query(CatalogFileChunk).delete();s.commit()
+    body=payload(make_type(client));body.update(is_faculty_work=True,digital_upload=token)
+    saved=client.post('/api/records',json=body);assert saved.status_code==201,saved.text
+    path=f"/api/student/v1/books/utblib-{saved.json()['id']}/file"
+    result=client.get(path,headers=signed(path))
+    assert result.status_code==200 and result.content==original
+    assert int(result.headers['content-length'])==len(original)
+    for value,start,end in [('bytes=1000-2099',1000,2100),('bytes=-77',len(original)-77,len(original)),
+                            ('bytes=2000-',2000,len(original)),('bytes=0-99999999',0,len(original))]:
+        response=client.get(path,headers=signed(path,Range=value))
+        assert response.status_code==206 and response.content==original[start:end]
+        assert response.headers['content-range']==f'bytes {start}-{end-1}/{len(original)}'
+        assert int(response.headers['content-length'])==end-start
+    for value in ['bytes=-0','bytes=7-2','bytes=1-3,7-9','bytes='+('9'*5000)+'-']:
+        assert client.get(path,headers=signed(path,Range=value)).status_code==416
+
+
+def test_upload_size_limits_cleanup_and_failed_storage(client,monkeypatch,tmp_path):
+    from app import catalog_files
+    import tempfile
+    monkeypatch.setattr(tempfile,'tempdir',str(tmp_path))
+    data=pdf();headers={'Content-Type':'application/pdf'}
+    assert catalog_files.MAX_FILE==1024**3
+    response=client.post('/api/catalog-files?filename=large.pdf',content=b'%PDF-',headers={**headers,'Content-Length':str(1024**3+1)})
+    assert response.status_code==413
+    monkeypatch.setattr(catalog_files,'MAX_FILE',len(data))
+    assert client.post('/api/catalog-files?filename=exact.pdf',content=data,headers=headers).status_code==201
+    # No Content-Length: enforce the actual bytes received, too.
+    assert client.post('/api/catalog-files?filename=large.pdf',content=iter([data,b'x']),headers=headers).status_code==413
+    assert list(tmp_path.iterdir())==[]
+    # A chunk insert failure must not leave a partially stored file.
+    real_insert=catalog_files.insert
+    def fail_insert(table):
+        if table is CatalogFileChunk: raise RuntimeError('simulated storage failure')
+        return real_insert(table)
+    monkeypatch.setattr(catalog_files,'insert',fail_insert)
+    with pytest.raises(RuntimeError,match='simulated storage failure'):
+        client.post('/api/catalog-files?filename=failed.pdf',content=data,headers=headers)
+    assert list(tmp_path.iterdir())==[]
+    with session() as s:
+        assert s.scalar(select(func.count()).select_from(CatalogFile))==1
+        assert s.scalar(select(func.sum(CatalogFile.size)))==len(data)

@@ -34,6 +34,13 @@ class CatalogFile(Base):
     pages: Mapped[int]=mapped_column(Integer)
     content: Mapped[bytes]=mapped_column(LargeBinary,deferred=True)
     cover: Mapped[bytes]=mapped_column(LargeBinary,deferred=True)
+    chunk_size: Mapped[int]=mapped_column(Integer,default=0,server_default='0')
+
+class CatalogFileChunk(Base):
+    __tablename__='catalog_file_chunks'
+    file_id: Mapped[str]=mapped_column(__import__('sqlalchemy').ForeignKey('catalog_files.id',ondelete='CASCADE'),primary_key=True)
+    position: Mapped[int]=mapped_column(Integer,primary_key=True)
+    content: Mapped[bytes]=mapped_column(LargeBinary,deferred=True)
 
 class VocabularyEntry(Base):
     __tablename__='vocabulary_entries'

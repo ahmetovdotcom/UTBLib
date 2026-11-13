@@ -27,6 +27,14 @@ await page.route('**/api/**',async route=>{
 try{
  await page.goto('http://127.0.0.1:18145/#/catalog?record=42');
  await page.getByLabel('Труды ППС',{exact:true}).check();
+ await page.evaluate(()=>{
+  const input=document.querySelector('input[type=file][accept="application/pdf,.pdf"]');
+  const file=new File(['%PDF-synthetic'],'oversize.pdf',{type:'application/pdf'});
+  Object.defineProperty(file,'size',{value:1024**3+1});
+  const transfer=new DataTransfer();transfer.items.add(file);input.files=transfer.files;
+  input.dispatchEvent(new Event('change',{bubbles:true}));
+ });
+ await page.getByRole('alert').filter({hasText:'Выберите PDF размером до 1 ГБ (1024 МБ).'}).waitFor();
  await page.locator('input[type=file][accept="application/pdf,.pdf"]').setInputFiles({name:'test.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-synthetic')});
  await page.getByText('test.pdf',{exact:true}).waitFor();
  await page.getByLabel('Взять первую страницу как обложку',{exact:true}).check();
