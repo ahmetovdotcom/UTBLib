@@ -23,8 +23,8 @@ def pdf_text(data):
                 return text.get_text_range()
 
 
-@pytest.mark.parametrize('language,expected', [('ru', ['Уважаемый читатель,', 'Не помню логин или пароль', 'Читальный зал']),
-                                              ('kk', ['Құрметті оқырман,', 'Логинімді немесе құпиясөзімді ұмыттым', 'Оқу залы'])])
+@pytest.mark.parametrize('language,expected', [('ru', ['Уважаемый читатель!', 'Не помню логин или пароль', 'Читальный зал']),
+                                              ('kk', ['Құрметті оқырман!', 'Логинімді немесе құпиясөзімді ұмыттым', 'Оқу залы'])])
 def test_instruction_is_localized_a4_and_does_not_change_token_or_visits(client, point, language, expected):
     branch, token = point
     with session() as s:
