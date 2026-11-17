@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import {ref,nextTick} from 'vue';
+import {ref,nextTick,computed} from 'vue';
 const props=defineProps<{api:(path:string,method?:string,body?:any)=>Promise<any>,branches:any[];eventId?:number}>();
 const dialog=ref<HTMLDialogElement|null>(null),branch=ref<number|null>(null),busy=ref(false),error=ref(''),point=ref<any>(null);
 const origin=ref(localStorage.getItem('visit-qr-origin') || (['localhost','127.0.0.1'].includes(location.hostname)?'http://localhost:8098':'https://elibrary.kaztbu.edu.kz'));
+const language=ref<'ru'|'kk'>('ru');
+const instructionUrl=computed(()=>'/api/visits/qr-points/'+branch.value+'/instruction.pdf?'+new URLSearchParams({base_url:origin.value,lang:language.value}));
 async function open(){point.value=null;error.value='';branch.value=props.branches[0]?.id||null;await nextTick();dialog.value?.showModal();}
 async function prepare(rotate=false,enabled?:boolean){
  if(rotate&&!confirm('Заменить QR-код? Ранее распечатанный код перестанет работать.'))return;
@@ -32,11 +34,20 @@ function print(){
    <h3>{{point.name}}</h3><p v-if="!point.enabled" class="error">Этот QR-код отключён.</p>
    <div v-html="point.qr_svg" role="img" :aria-label="'QR для '+point.name" class="qr-image"></div>
    <label>Ссылка для посетителя<input :value="point.link" readonly @focus="($event.target as HTMLInputElement).select()"></label>
-   <div class="qr-actions"><button @click="print" :disabled="!point.enabled||busy">Печать QR</button><a :href="point.link" target="_blank" rel="noreferrer">Открыть страницу</a><button @click="prepare(false,!point.enabled)" :disabled="busy">{{point.enabled?'Отключить':'Включить'}}</button><button @click="prepare(true)" :disabled="busy">Заменить QR</button></div>
+   <section v-if="!eventId" class="qr-instruction" aria-label="Печать инструкции">
+    <h4>Инструкция для читателей · А4</h4>
+    <p>Готовый лист с QR-кодом этого пункта, входом через Платонус и отметкой без входа.</p>
+    <label>Язык инструкции<select v-model="language" :disabled="busy"><option value="ru">Русский</option><option value="kk">Қазақша</option></select></label>
+    <div class="qr-actions" v-if="point.enabled&&!busy"><a class="qr-print-link" :href="instructionUrl" target="_blank" rel="noopener">Открыть и распечатать А4</a><a :href="instructionUrl+'&download=true'">Скачать PDF</a></div>
+    <p v-else class="muted">Для печати включите QR-код и дождитесь завершения подготовки.</p>
+    <p class="muted">PDF откроется в новой вкладке. Нажмите значок печати и выберите бумагу А4.</p>
+   </section>
+   <div class="qr-actions"><button @click="print" :disabled="!point.enabled||busy">{{eventId?'Печать QR':'Только QR без инструкции'}}</button><a :href="point.link" target="_blank" rel="noreferrer">Открыть страницу</a><button @click="prepare(false,!point.enabled)" :disabled="busy">{{point.enabled?'Отключить':'Включить'}}</button><button @click="prepare(true)" :disabled="busy">Заменить QR</button></div>
   </div>
   <p class="muted">Статичный QR можно сфотографировать и открыть позже. В журнале самостоятельные отметки выделяются по источнику; они не являются подтверждением присутствия сотрудником.</p>
  </dialog>
 </template>
 <style scoped>
 .visit-qr-dialog{width:min(620px,calc(100vw - 32px));max-height:90vh;overflow:auto;border:1px solid #dce5ed;border-radius:20px;padding:24px;color:#052744}.visit-qr-dialog::backdrop{background:#05274488}.qr-heading,.qr-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.qr-heading{justify-content:space-between}.qr-heading h2{margin:0;font-size:22px}.visit-qr-dialog label{display:block;margin:16px 0;font-weight:600}.visit-qr-dialog input,.visit-qr-dialog select{width:100%;box-sizing:border-box;margin-top:6px}.qr-result{border-top:1px solid #dce5ed;margin-top:24px;padding-top:16px}.qr-image{text-align:center;background:white}.qr-image :deep(svg){width:240px;height:240px;max-width:100%}.muted{font-size:12px;color:#60758d;line-height:1.6}.qr-actions{margin-top:16px}.qr-actions a{font-size:14px}
+.qr-instruction{margin-top:20px;padding:16px;border:1px solid #c9ded8;border-radius:12px;background:#f2f6f4}.qr-instruction h4{margin:0;font-size:17px}.qr-instruction p{line-height:1.5}.qr-actions .qr-print-link{display:inline-block;padding:10px 14px;border-radius:8px;background:#087f80;color:white;font-weight:600;text-decoration:none}
 </style>

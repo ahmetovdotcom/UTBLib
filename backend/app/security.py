@@ -142,6 +142,7 @@ def permission_for(method,path):
     if path.startswith('/api/events'):
         if method == 'GET': return 'events.view'
         return 'events.record' if path.endswith('/attendance') and method == 'POST' else 'events.manage'
+    if path.startswith('/api/visits/qr-points'): return 'visits.record'
     if path.startswith('/api/visits'): return 'visits.record' if method=='POST' or path.endswith('/lookup') else 'visits.view'
     if path.startswith('/api/settings-transfer/'): return 'settings.edit'
     if path in ('/api/catalog-attention','/api/catalog-attention/options') and method=='GET': return 'catalog.view'

@@ -7,12 +7,13 @@ import secrets
 import time
 import unicodedata
 from datetime import timedelta
+from typing import Annotated, Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
 import qrcode
 from qrcode.image.svg import SvgPathImage
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 
@@ -57,6 +58,18 @@ class CheckIn(BaseModel):
         if not value or any(unicodedata.category(c).startswith('C') for c in value):
             raise ValueError('Введите корректное значение')
         return value
+
+
+class InstructionInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    base_url: str = Field(max_length=250)
+    lang: Literal['ru', 'kk'] = 'ru'
+    download: bool = False
+
+    @field_validator('base_url')
+    @classmethod
+    def origin(cls, value):
+        return PointInput.origin(value)
 
 
 def active_point(s, token):
@@ -157,6 +170,23 @@ def check_in(body: CheckIn, subject=Depends(assertion), s=Depends(get_db)):
 
 def make_staff_router(auth):
     router = APIRouter(prefix='/api/visits/qr-points')
+
+    @router.get('/{branch_id}/instruction.pdf')
+    def instruction(branch_id: int, query: Annotated[InstructionInput, Query()], user=Depends(auth), s=Depends(get_db)):
+        from .visit_instruction import render_instruction
+        branch = s.get(Branch, branch_id)
+        point = s.get(VisitQrPoint, branch_id)
+        if not branch or not branch.active or not point or not point.enabled:
+            raise HTTPException(404, 'Сначала подготовьте действующий QR-код этого пункта обслуживания.')
+        link = query.base_url + '/visit/' + point.token + '?lang=' + query.lang
+        name = branch.name
+        s.rollback()  # PDF rendering needs no database connection or writes.
+        pdf = render_instruction(name, link, query.lang)
+        disposition = 'attachment' if query.download else 'inline'
+        return Response(pdf, media_type='application/pdf', headers={
+            'Content-Disposition': f'{disposition}; filename="visit-instruction-{branch_id}-{query.lang}.pdf"',
+            'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff',
+        })
 
     @router.post('/{branch_id}')
     def prepare(branch_id: int, body: PointInput, user=Depends(auth), s=Depends(get_db)):
