@@ -109,6 +109,7 @@ def identity(request:Request,s=Depends(get_db)):
 
 # Every existing endpoint has a permission; unmatched paths are denied.
 def permission_for(method,path):
+    if path.startswith('/api/reports/'): return 'catalog.view'
     if path.startswith('/api/site-content'): return 'site.manage'
     # Mobile routes delegate this capability through a scoped token and recheck its owner's login.
     if path.startswith('/api/photo-transfer/'): return 'catalog.edit'
@@ -176,7 +177,7 @@ def auth(request:Request,s=Depends(get_db)):
     user=identity(request,s)
     permission=permission_for(request.method,request.url.path)
     if (request.method not in ('GET','HEAD','OPTIONS') and request.url.path not in ('/api/book-photos/analyze','/api/catalog-search/records','/api/catalog-files')
-            and not request.url.path.startswith('/api/photo-transfer/')):
+            and not request.url.path.startswith(('/api/photo-transfer/','/api/reports/'))):
         lock(s,'circulation-stock-gate')
     if permission=='circulation.options':
         if not any(has(user,p) for p in ('circulation.issue','circulation.return','circulation.renew','circulation.view_any_history','circulation.view_own_history','reservations.manage','fines.manage','incidents.manage','circulation.settings','circulation.copies')): raise HTTPException(403,'Нет доступа к настройкам рабочего места')

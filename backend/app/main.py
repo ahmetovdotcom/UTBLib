@@ -348,7 +348,7 @@ app.include_router(readers_router(auth,db))
 @app.middleware('http')
 async def reader_private_responses(request:Request,call_next):
     response=await call_next(request)
-    if request.url.path.startswith(('/api/events','/api/readers','/api/visits','/api/check-in/','/api/statistics/attendance','/api/reader-branches','/api/circulation','/api/photo-transfer')):
+    if request.url.path.startswith(('/api/reports','/api/events','/api/readers','/api/visits','/api/check-in/','/api/statistics/attendance','/api/reader-branches','/api/circulation','/api/photo-transfer')):
         response.headers['Cache-Control']='private, no-store'
         response.headers['X-Content-Type-Options']='nosniff'
         response.headers['Referrer-Policy']='no-referrer'
@@ -365,3 +365,6 @@ app.include_router(attention_router(auth,db,DICTIONARY,LOCAL_DICTIONARY))
 
 from .catalog_terms import make_router as catalog_terms_router
 app.include_router(catalog_terms_router(auth,db,DICTIONARY,LOCAL_DICTIONARY))
+
+from .reports import make_router as reports_router
+app.include_router(reports_router(auth,db,DICTIONARY,LOCAL_DICTIONARY))

@@ -8,6 +8,7 @@ export const sections:Record<string,{title:string;permissions:string[]}>= {
  withdrawals:{title:'Списание',permissions:['withdrawals.view']},readers:{title:'Читатели',permissions:['readers.registry.view']},
  circulation:{title:'Книговыдача',permissions:['circulation.issue','circulation.return','circulation.view_any_history','circulation.view_own_history','loans.view_own','reservations.manage','fines.manage','incidents.manage','circulation.settings']},
  visits:{title:'Посещения',permissions:['visits.record','visits.view']},events:{title:'Мероприятия',permissions:['events.view']},
+ reports:{title:'Отчёты',permissions:['catalog.view']},
  statistics:{title:'Работа сотрудников',permissions:['statistics.view']},'book-fund':{title:'Книжный фонд',permissions:['statistics.view']},
  'circulation-statistics':{title:'Статистика книговыдачи',permissions:['statistics.view']},attendance:{title:'Посещаемость',permissions:['visits.view']},
  site:{title:'Сайт библиотеки',permissions:['site.manage']},users:{title:'Пользователи и права',permissions:[]}

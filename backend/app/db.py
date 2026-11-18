@@ -204,6 +204,15 @@ class UserSession(Base):
     user_id: Mapped[int]=mapped_column(ForeignKey('users.id',ondelete='CASCADE'),index=True)
     expires_at: Mapped[int]=mapped_column(BigInteger,index=True)
 
+class ReportTemplate(Base):
+    __tablename__='report_templates'
+    id: Mapped[int]=mapped_column(primary_key=True)
+    user_id: Mapped[int]=mapped_column(ForeignKey('users.id',ondelete='CASCADE'),index=True)
+    name: Mapped[str]=mapped_column(String(120))
+    definition: Mapped[dict]=mapped_column(JSON().with_variant(JSONB,'postgresql'))
+    version: Mapped[int]=mapped_column(Integer,default=1)
+    updated_at: Mapped[datetime]=mapped_column(DateTime(timezone=True),default=utcnow)
+
 class LoginAttempt(Base):
     __tablename__='login_attempts'
     key: Mapped[str]=mapped_column(String(64),primary_key=True)
