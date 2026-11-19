@@ -33,10 +33,11 @@ def signed(path,key='test-faculty-bridge-key-0123456789012345',**extra):
     return {'X-Reader-Subject':subject,'X-Reader-Time':stamp,'X-Reader-Signature':hmac.new(key.encode(),'\n'.join(['GET',path,'',subject,stamp]).encode(),hashlib.sha256).hexdigest(),**extra}
 
 
-def test_publication_atomic_private_detail_cover_and_reading(client,monkeypatch):
+@pytest.mark.parametrize(('marc_language','public_language'),[('rus','ru'),('kaz','kk'),('eng','en'),('ruskaz','ru')])
+def test_publication_atomic_private_detail_cover_and_reading(client,monkeypatch,marc_language,public_language):
     monkeypatch.setenv('STUDENT_BRIDGE_KEY','test-faculty-bridge-key-0123456789012345')
     token=upload(client)
-    body=payload(make_type(client));body['marc']['fields'] += [field('520',value='Public annotation'),field('300',value='FULL_EXTENT'),field('097','b','PRIVATE_OPERATOR'),field('020',value='9786010433649')]
+    body=payload(make_type(client));body['marc']['fields'] += [field('041',value=marc_language),field('520',value='Public annotation'),field('300',value='FULL_EXTENT'),field('097','b','PRIVATE_OPERATOR'),field('020',value='9786010433649')]
     body.update(is_faculty_work=True,use_first_page_cover=True,digital_upload=token,request_key=str(uuid4()))
     saved=client.post('/api/records',json=body);assert saved.status_code==201,saved.text
     rid=saved.json()['id'];identifier=f'utblib-{rid}'
@@ -48,6 +49,13 @@ def test_publication_atomic_private_detail_cover_and_reading(client,monkeypatch)
             assert 'FULL_EXTENT' not in response.text and 'PRIVATE_OPERATOR' not in response.text
             assert 'Public annotation' in response.text
             assert 'electronicFile' not in response.text
+            data=response.json()['data']
+            book=data[0] if isinstance(data,list) else data
+            assert book['language']['code']==public_language
+            if marc_language=='ruskaz': assert book['language']['codes']==['ru','kk']
+            assert book['loginRequired'] is True
+        filtered=guest.get('/api/public/v1/catalog',params={'faculty_works_only':True,'language':public_language}).json()
+        assert filtered['data'][0]['language']['code']==public_language and filtered['meta']['total']==1
         cover=guest.get(f'/api/public/v1/book-covers/{identifier}')
         assert cover.status_code==200 and cover.content.startswith(b'\xff\xd8')
         with Image.open(BytesIO(cover.content)) as image: assert max(image.size)<=1400
@@ -57,6 +65,7 @@ def test_publication_atomic_private_detail_cover_and_reading(client,monkeypatch)
         assert guest.get(stream,headers=signed(detail)).status_code==401
         full=guest.get(detail,headers=signed(detail));assert full.status_code==200
         assert full.json()['data']['physicalExtent']=='FULL_EXTENT' and not full.json()['data']['loginRequired']
+        assert full.json()['data']['language']['code']==public_language
         assert 'PRIVATE_OPERATOR' not in full.text
         result=guest.get(stream,headers=signed(stream,Range='bytes=0-19'))
         assert result.status_code==206 and result.content==pdf()[:20]

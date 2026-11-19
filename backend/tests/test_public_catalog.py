@@ -14,6 +14,57 @@ from app.circulation_models import CopyCirculation, Reservation
 ROOT = '/api/public/v1'
 
 
+@pytest.mark.parametrize(('raw', 'expected'), [
+    ([' RUS '], ['ru']), (['rus,kaz'], ['ru', 'kk']),
+    (['rus; KAZ / eng'], ['ru', 'kk', 'en']), (['ruskazeng'], ['ru', 'kk', 'en']),
+    (['rus', 'kaz', 'rus'], ['ru', 'kk']), (['рус; қаз'], ['ru', 'kk']),
+    (['ger; deu; fre; fra; chi; zho'], ['de', 'fr', 'zh']),
+    (['tur+uzb|kir'], ['tr', 'uz', 'ky']), (['mul'], ['mul']),
+    (['rus;zzz'], ['ru', 'other']), (['ruszzz'], ['other']),
+    (['russian'], ['other']), ([''], []), ([], []),
+])
+def test_language_codes_are_parsed_without_guessing(raw, expected):
+    from app.catalog_languages import languages
+    assert languages(raw) == expected
+
+
+def test_multilingual_cards_filters_facets_and_source_preservation(client):
+    from copy import deepcopy
+    _, _, rid = seed()
+    with session() as s:
+        record = s.get(Record, rid)
+        marc = deepcopy(record.marc)
+        marc['fields'] = [f for f in marc['fields'] if f['tag'] != '041']
+        marc['fields'] += [field('041', value='RUS;kaz'), field('041', value='ruskazeng'),
+                           field('041', 'h', 'ger'), field('041', 'b', 'fre')]
+        record.marc = marc
+        record.version += 1
+        s.commit()
+    for code in ('ru', 'rus', 'kk', 'kaz', 'en', 'eng'):
+        response = client.get(ROOT + '/catalog', params={'language': code})
+        assert response.status_code == 200
+        assert response.json()['meta']['total'] == 1
+        language = response.json()['data'][0]['language']
+        assert language['code'] == 'ru'
+        assert language['codes'] == ['ru', 'kk', 'en']
+        assert language['raw'] == 'RUS;kaz; ruskazeng'
+    for code in ('de', 'fr', 'other'):
+        assert client.get(ROOT + '/catalog', params={'language': code}).json()['meta']['total'] == 0
+    assert client.get(ROOT + '/facets').json()['languages'] == [
+        {'value': 'en', 'count': 1}, {'value': 'kk', 'count': 1}, {'value': 'ru', 'count': 1}]
+    assert client.get(ROOT + f'/books/utblib-{rid}').json()['data']['language']['codes'] == ['ru', 'kk', 'en']
+    with session() as s:
+        assert s.get(Record, rid).marc == marc
+
+
+def test_language_008_fallback_and_explicit_unknown_041():
+    from app.public_catalog import project
+    record = Record(id=123, marc={'fields': [{'tag': '008', 'value': ' ' * 35 + 'ger' + '  '}]})
+    assert project(record, {})['language']['codes'] == ['de']
+    record.marc['fields'].append(field('041', value='zzz'))
+    assert project(record, {})['language']['codes'] == ['other']
+
+
 def test_public_projection_search_and_staff_privacy(client):
     _, _, rid = seed()
     with session() as s:

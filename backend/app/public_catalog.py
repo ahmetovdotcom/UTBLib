@@ -16,6 +16,7 @@ from sqlalchemy import and_, case, func, select
 from .db import AcquisitionLine, Copy, DocumentType, Record, get_db
 from .circulation_models import ACTIVE_RESERVATIONS, CopyCirculation, Loan, Reservation
 from .reader_models import Branch
+from .catalog_languages import language, languages
 
 router = APIRouter(prefix='/api/public/v1', tags=['Public catalogue'])
 PUBLIC_PATHS = frozenset(('/api/public/v1/catalog', '/api/public/v1/facets', '/api/public/v1/books/{identifier}'))
@@ -29,10 +30,6 @@ def values(marc, tag, code):
             if sf.get('code') == code and str(sf.get('value', '')).strip()]
 
 
-def language(value):
-    return {'ru': 'ru', 'rus': 'ru', 'kk': 'kk', 'kaz': 'kk', 'kz': 'kk', 'en': 'en', 'eng': 'en'}.get(value.strip().casefold(), 'other')
-
-
 def isbn_key(value):
     return re.sub(r'[^0-9X]', '', value.upper())
 
@@ -44,11 +41,13 @@ def project(record, types):
     year = re.search(r'\b(1[4-9]\d{2}|20\d{2})\b', f('260', 'c') or f('264', 'c'))
     title = f('245', 'a') or 'Без заглавия'
     authors = list(dict.fromkeys(v('100', 'a') + v('700', 'a')))
-    langs = list(dict.fromkeys(language(x) for x in v('041', 'a')))
+    raw_languages = v('041', 'a')
+    langs = languages(raw_languages)
     if not langs:
         fixed = next((str(x.get('value') or '') for x in m.get('fields', []) if x.get('tag') == '008'), '')
         if len(fixed) >= 38 and re.fullmatch('[a-z]{3}', fixed[35:38]):
-            langs = [language(fixed[35:38])]
+            raw_languages = [fixed[35:38]]
+            langs = languages(raw_languages)
     if not langs:
         langs = ['other']
     kind = types.get(record.type_id, '').casefold()
@@ -64,7 +63,7 @@ def project(record, types):
         'publicationPlace': f('260', 'a') or f('264', 'a'),
         'publicationYear': int(year[0]) if year else None,
         'statementOfResponsibility': f('245', 'c'), 'editionStatement': f('250', 'a'),
-        'language': {'code': langs[0] if langs else '', 'raw': langs[0] if langs else '', 'label': ''},
+        'language': {'code': langs[0], 'codes': langs, 'raw': '; '.join(raw_languages), 'label': ''},
         'isbn': {'raw': next(iter(v('020', 'a')), '')}, 'issn': {'raw': f('022', 'a')},
         'resourceType': resource, 'annotation': f('520', 'a'), 'originalAnnotation': f('520', 'a'),
         'keywords': v('653', 'a'), 'metadataLocale': langs[0] if langs else '',
@@ -150,10 +149,10 @@ def indicators(stock):
 def present(book, stock, full=False):
     if book.get('isFacultyWork') and not full:
         # Stable shape for catalogue cards, but never expose full metadata publicly.
-        allowed={'id','source','title','primaryAuthor','authors','publicationYear','annotation','coverPath','isFacultyWork','resourceType'}
+        allowed={'id','source','title','primaryAuthor','authors','publicationYear','language','annotation','coverPath','isFacultyWork','resourceType'}
         brief={k:v for k,v in book.items() if k in allowed or k.startswith('_')}
         brief.update(loginRequired=True,publisher={'name':''},isbn={'raw':''},udc={'raw':'','display':''},
-            language={'code':'','label':''},keywords=[],subjects=[],electronicMaterials=[],
+            keywords=[],subjects=[],electronicMaterials=[],
             viewer={'authenticated':False,'canReserve':False,'reservationEligible':False},
             copies={'available':0,'issued':0,'total':0},indicators={'format':'metadata_only','availability':'no_holdings'},
             availability={'isAvailable':False,'availableCopies':0,'issuedCopies':0,'totalCopies':0,'locations':[]})
