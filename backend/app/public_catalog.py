@@ -17,6 +17,7 @@ from .db import AcquisitionLine, Copy, DocumentType, Record, get_db
 from .circulation_models import ACTIVE_RESERVATIONS, CopyCirculation, Loan, Reservation
 from .reader_models import Branch
 from .catalog_languages import language, languages
+from .catalog_udc import select_udc, matches as matches_udc
 
 router = APIRouter(prefix='/api/public/v1', tags=['Public catalogue'])
 PUBLIC_PATHS = frozenset(('/api/public/v1/catalog', '/api/public/v1/facets', '/api/public/v1/books/{identifier}'))
@@ -54,6 +55,8 @@ def project(record, types):
     level = str(m.get('leader', ''))[7:8]
     resource = 'article' if 'стать' in kind or level == 'a' else 'journal' if 'журнал' in kind or 'период' in kind or level == 's' else 'book'
     category = f('952', 'c') or f('952', 'a')
+    udc_values, udc_source = select_udc(v('080', 'a'), v('090', 'a'))
+    udc_display = ' · '.join(udc_values)
     b = {
         'id': f'utblib-{record.id}', 'source': 'utblib',
         'title': {'display': title, 'raw': title, 'subtitle': f('245', 'b'), 'original': title, 'isFallback': False},
@@ -69,7 +72,7 @@ def project(record, types):
         'keywords': v('653', 'a'), 'metadataLocale': langs[0] if langs else '',
         'subjects': [{'term': x, 'scheme': 'topical'} for x in v('650', 'a')],
         'classification': [{'id': x, 'label': x, 'sourceKind': 'subject', 'scheme': 'topical'} for x in v('650', 'a')],
-        'udc': {'raw': f('080', 'a'), 'display': f('080', 'a'), 'description': '', 'source': 'udc' if v('080', 'a') else ''},
+        'udc': {'raw': udc_display, 'display': udc_display, 'description': '', 'source': udc_source},
         'authorMark': f('090', 'x'), 'physicalExtent': f('300', 'a'), 'physicalDetails': f('300', 'b'),
         'dimensions': f('300', 'c'), 'accompanyingMaterial': f('300', 'e'),
         'seriesTitle': f('490', 'a') or f('440', 'a'), 'seriesNumber': f('490', 'v'),
@@ -82,9 +85,10 @@ def project(record, types):
         'electronicFile': {'pages':record.digital_file.pages,'size':record.digital_file.size} if record.is_faculty_work and record.digital_file else None, 'electronicMaterials': [], 'relatedMaterials': [], 'similarMaterials': [],
         'viewer': {'authenticated': False, 'canReserve': False, 'reservationEligible': False, 'activeLoan': None},
         '_id': record.id, '_languages': langs, '_isbns': [isbn_key(x) for x in v('020', 'a')], '_category': category,
+        '_udc_values': udc_values,
     }
     b['_search'] = ' '.join([title, f('245', 'b'), *authors, b['publisher']['name'], *v('020', 'a'),
-                           *b['_isbns'], f('080', 'a'), f('520', 'a'), *v('653', 'a'), *v('650', 'a')]).casefold()
+                           *b['_isbns'], udc_display, f('520', 'a'), *v('653', 'a'), *v('650', 'a')]).casefold()
     return b
 
 
@@ -213,7 +217,7 @@ def search(s, p):
         if p.author.casefold() not in ' '.join(x['name'] for x in b['authors']).casefold(): continue
         if p.publisher.casefold() not in b['publisher']['name'].casefold(): continue
         if p.isbn and not any(isbn_key(p.isbn) in x for x in b['_isbns']): continue
-        if p.udc.casefold() not in b['udc']['raw'].casefold(): continue
+        if p.udc and not matches_udc(b['_udc_values'], p.udc): continue
         if p.subject.casefold() not in ' '.join([b['annotation'], *b['keywords'], *(x['term'] for x in b['subjects'])]).casefold(): continue
         if p.subject_id and p.subject_id not in [x['term'] for x in b['subjects']]: continue
         if p.language and language(p.language) not in b['_languages']: continue
@@ -270,7 +274,7 @@ def facets(faculty_works_only:bool=False,s=Depends(get_db)):
             'branches': [{'value': code, 'label': name, 'count': sum(any(l['servicePoint']['code'] == code for l in c['locations']) for c in stock.values())}
                          for code, name in s.execute(select(Branch.code, Branch.name))
                          if any(any(l['servicePoint']['code'] == code for l in c['locations']) for c in stock.values())],
-            'udc': count(b['udc']['raw'] for b in books),
+            'udc': count(value for b in books for value in b['_udc_values']),
             'availability': [{'value': key, 'count': sum(bool(stock.get(b['_id'], {}).get(key)) for b in books)}
                              for key in ('available', 'issued', 'processing', 'repair')] +
                             [{'value': 'no_holdings', 'count': sum(not stock.get(b['_id'], {}).get('total') for b in books)}],
