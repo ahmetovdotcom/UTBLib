@@ -315,3 +315,62 @@ def test_legacy_blank_allowance_does_not_cross_fields_or_positions():
     modified=copy.deepcopy(original)
     modified['fields'][1]['ind2']=' '
     assert validate_marc(modified,[],DICTIONARY,previous=original)[0]==["440: invalid indicator 2: ' '"]
+
+
+@pytest.mark.parametrize('local',[False,True])
+def test_edit_imported_blank_subject_indicator_preserves_source(client,local):
+    config=[{'tag':'245','required':True,'local':local}, {'tag':'650','local':local}]
+    type_id=client.post('/api/types',json={'name':'Legacy subjects','config':config}).json()['id']
+    item='245  \x1faКурс английского языка для финансистов\x1e650  \x1faАнглийский язык'
+    imported=client.post('/api/import/marcsql',json={
+        'source':'regression-subject','doc_id':1,'type_id':type_id,
+        'rectype':'a','biblevel':'m','item':item,'preview':False,
+    })
+    assert imported.status_code==200,imported.text
+    endpoint=f"/api/records/{imported.json()['record_id']}"
+    saved=client.get(endpoint).json()
+    body={k:saved[k] for k in ('type_id','version','marc')}
+    next(f for f in body['marc']['fields'] if f['tag']=='245')['subfields'].append({'code':'b','value':'Учебник'})
+    subject=next(f for f in body['marc']['fields'] if f['tag']=='650')
+    updated=client.put(endpoint,json=body)
+    assert updated.status_code==200,updated.text
+    result=updated.json()
+    assert result['marc']==body['marc']
+    assert any(w.startswith('650:') and 'пустой индикатор 2' in w for w in result['warnings'])
+    assert client.get(endpoint+'/marcsql-source').json()['item']==item
+    body['version']=result['version']
+    # Repeating a legacy blank does not grant a new invalid occurrence.
+    duplicate=copy.deepcopy(body)
+    duplicate['marc']['fields'].append(copy.deepcopy(subject))
+    assert client.put(endpoint,json=duplicate).status_code==422
+    # Other invalid values still fail, including on an existing legacy field.
+    invalid=copy.deepcopy(body)
+    next(f for f in invalid['marc']['fields'] if f['tag']=='650')['ind2']='x'
+    assert client.put(endpoint,json=invalid).status_code==422
+    subject['ind2']='4'
+    corrected=client.put(endpoint,json=body)
+    assert corrected.status_code==200,corrected.text
+    assert next(f for f in corrected.json()['marc']['fields'] if f['tag']=='650')['ind2']=='4'
+    body['version']=corrected.json()['version']
+    subject['ind2']=' '
+    # A valid first-indicator blank cannot restore a corrected second indicator.
+    assert client.put(endpoint,json=body).status_code==422
+
+
+@pytest.mark.parametrize('ind1,ind2',[(' ',' '),(' ','x'),('9','4')])
+def test_new_subject_indicators_remain_strict(client,ind1,ind2):
+    body=payload(make_type(client))
+    subject=field('650',value='Английский язык')
+    subject.update(ind1=ind1,ind2=ind2)
+    body['marc']['fields'].append(subject)
+    assert client.post('/api/records',json=body).status_code==422
+
+
+def test_legacy_subject_blank_allowance_does_not_cross_tags_and_allows_reordering():
+    original=payload(1)['marc']
+    original['fields'] += [field('650',value='Английский язык'),field('650',value='Финансы')]
+    modified=copy.deepcopy(original)
+    modified['fields'].reverse()
+    assert validate_marc(modified,[],DICTIONARY,previous=original)[0]==[]
+    modified['fields'].append(field('440',value='Серия'))
+    assert validate_marc(modified,[],DICTIONARY,previous=original)[0]==["440: invalid indicator 2: ' '"]

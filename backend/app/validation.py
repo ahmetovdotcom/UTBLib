@@ -24,10 +24,10 @@ def validate_marc(marc, config, dictionary, previous=None):
                                 for c in config if c['tag'] in dictionary}}
     old_fields=(previous or {}).get('fields', [])
     old_counts=Counter(f['tag'] for f in old_fields)
-    # MARCSQL exports may leave title/series indicators blank. Preserve only blanks
+    # MARCSQL exports may leave title/series/subject indicators blank. Preserve only blanks
     # already stored in this record; do not invent cataloguing semantics.
     legacy_blanks=Counter(
-        (f['tag'],pos) for f in old_fields if f['tag'] in ('245','440')
+        (f['tag'],pos) for f in old_fields if f['tag'] in ('245','440','650')
         for pos in (1,2) if f.get(f'ind{pos}')==' '
     )
     if len(marc['leader'])!=24 or not marc['leader'].isascii(): errors.append('Leader must contain 24 ASCII characters')
