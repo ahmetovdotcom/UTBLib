@@ -41,9 +41,14 @@ def test_specialty_repeats_by_default_and_survives_disabling(client):
     assert any('повторения' in w for w in saved['warnings'])
     third=deepcopy(saved)
     next(f for f in third['marc']['fields'] if f['tag']=='952')['subfields'].append({'code':'j','value':'Туризм'})
-    assert update_record(client,third).status_code==422
-    # A fresh record gets no legacy allowance.
-    assert client.post('/api/records',json=body).status_code==422
+    result=update_record(client,third)
+    assert result.status_code==200,result.text
+    assert '952$j: not repeatable' in result.json()['warnings']
+    third=result.json()
+    # New descriptions also retain all values with a quality warning.
+    fresh=client.post('/api/records',json=body)
+    assert fresh.status_code==201,fresh.text
+    assert '952$j: not repeatable' in fresh.json()['warnings']
     cfg['subfield_repeatable']['j']=True
     client.put(f'/api/types/{t}',json={'name':'Повторение','config':config})
     assert update_record(client,third).status_code==200
@@ -60,21 +65,32 @@ def test_field_and_subfield_overrides_are_independent_and_type_scoped(client):
     assert next(s for s in DICTIONARY['245']['subfields'] if s['code']=='a')['repeatable'] is False
     other=client.post('/api/types',json={'name':'Без настройки','config':[{'tag':'245'}]}).json()['id']
     p['type_id']=other
-    assert client.post('/api/records',json=p).status_code==422
+    unconfigured=client.post('/api/records',json=p)
+    assert unconfigured.status_code==201,unconfigured.text
+    assert '245: not repeatable' in unconfigured.json()['warnings']
+    assert '245$a: not repeatable' in unconfigured.json()['warnings']
     cfg['repeatable']=False;cfg['subfield_repeatable']['a']=False
     client.put(f'/api/types/{t}',json={'name':'Повторение','config':[cfg]})
     saved['marc']['fields'].reverse()
     r=update_record(client,saved);assert r.status_code==200,r.text
     saved=r.json();saved['marc']['fields'].append(field(value='Третье'))
-    assert update_record(client,saved).status_code==422
+    repeated=update_record(client,saved)
+    assert repeated.status_code==200,repeated.text
+    assert '245: not repeatable' in repeated.json()['warnings']
     p=payload(t);p['marc']['fields'].append(field(value='Второе'))
-    assert client.post('/api/records',json=p).status_code==422
-    # Re-enable field only: multiple fields allowed, repeated $a still rejected.
+    repeated=client.post('/api/records',json=p)
+    assert repeated.status_code==201,repeated.text
+    assert '245: not repeatable' in repeated.json()['warnings']
+    # Re-enable field only: repeated $a still produces its own warning.
     cfg['repeatable']=True
     client.put(f'/api/types/{t}',json={'name':'Повторение','config':[cfg]})
-    assert client.post('/api/records',json=p).status_code==201
+    enabled=client.post('/api/records',json=p)
+    assert enabled.status_code==201,enabled.text
+    assert '245: not repeatable' not in enabled.json()['warnings']
     p['marc']['fields'][0]['subfields'].append({'code':'a','value':'Повтор'})
-    assert client.post('/api/records',json=p).status_code==422
+    repeated=client.post('/api/records',json=p)
+    assert repeated.status_code==201,repeated.text
+    assert '245$a: not repeatable' in repeated.json()['warnings']
 
 
 def test_cloning_old_repeated_group_does_not_grant_new_subfield_repeats():
@@ -85,6 +101,9 @@ def test_cloning_old_repeated_group_does_not_grant_new_subfield_repeats():
     current=deepcopy(previous);current['fields'].append(deepcopy(f))
     errors,_=validate_marc(current,config,DICTIONARY,previous)
     assert '700$a: not repeatable' in errors
+    errors,warnings=validate_marc(current,config,DICTIONARY,previous,descriptive_warnings=True)
+    assert not errors
+    assert '700$a: not repeatable' in warnings
     current['fields'][-1]['subfields'].pop()
     assert validate_marc(current,config,DICTIONARY,previous)[0]==[]
 

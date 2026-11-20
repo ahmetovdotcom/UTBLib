@@ -65,10 +65,20 @@ def test_roundtrip_hidden_repeat_order_search_and_conflict(client):
     assert r.json()['marc']==p['marc']
     assert client.put(f"/api/records/{saved['id']}",json=body).status_code==409
 
-@pytest.mark.parametrize('change',[lambda p:p['marc']['fields'].append(field()),lambda p:p['marc']['fields'][0]['subfields'].append({'code':'a','value':'duplicate'}),lambda p:p['marc']['fields'][0].update(ind1='9'),lambda p:p['marc'].update(leader='short'),lambda p:p['marc'].update(fields=[]),lambda p:p['marc']['fields'].append({'tag':'008','value':'short'})])
-def test_validation(client,change):
+@pytest.mark.parametrize('change,status',[
+    (lambda p:p['marc']['fields'].append(field()),201),
+    (lambda p:p['marc']['fields'][0]['subfields'].append({'code':'a','value':'duplicate'}),201),
+    (lambda p:p['marc']['fields'][0].update(ind1='9'),201),
+    (lambda p:p['marc'].update(leader='short'),422),
+    (lambda p:p['marc'].update(fields=[]),201),
+    (lambda p:p['marc']['fields'].append({'tag':'008','value':'short'}),422),
+])
+def test_validation(client,change,status):
     p=payload(make_type(client)); change(p)
-    r=client.post('/api/records',json=p); assert r.status_code==422,r.text
+    r=client.post('/api/records',json=p); assert r.status_code==status,r.text
+    if status==201:
+        assert r.json()['warnings']
+        assert r.json()['marc']==p['marc']
 
 def test_profile_validation(client):
     assert client.post('/api/types',json={'name':'Invalid','config':[{'tag':'999'}]}).status_code==422
@@ -127,7 +137,9 @@ def test_vocabulary_manual_choice_and_description(client):
     saved=client.post('/api/records',json=p);assert saved.status_code==201,saved.text
     assert saved.json()['marc']['fields'][-1]['subfields'][0]['value']=='3'
     p['marc']['fields'][-1]['subfields'][0]['value']='unknown'
-    assert client.post('/api/records',json=p).status_code==422
+    manual=client.post('/api/records',json=p)
+    assert manual.status_code==201,manual.text
+    assert any('080$a:' in w for w in manual.json()['warnings'])
     entries=client.get(f'/api/types/{t}/vocabulary').json();assert len(entries)==1;assert entries[0]['label']=='Общественные науки'
     assert client.delete(f"/api/types/{t}/vocabulary/{entry.json()['id']}").status_code==204
     # Removing a suggestion never invalidates an unchanged existing record.
@@ -142,18 +154,22 @@ def test_vocabulary_auto_deduplicates_and_isolates_types(client):
     other=vocabulary_type(client,name='Другой тип');assert client.get(f'/api/types/{other}/vocabulary').json()==[]
     assert client.delete(f"/api/types/{other}/vocabulary/{entries[0]['id']}").status_code==404
     # Failed validation and stale writes must not contribute values.
-    invalid=payload(t);invalid['marc']['fields']=[field('080',value='999')]
+    invalid=payload(t);invalid['marc']['leader']='short';invalid['marc']['fields']=[field('080',value='999')]
     assert client.post('/api/records',json=invalid).status_code==422
     stale={k:saved.json()[k] for k in ('type_id','marc','version')};stale['version']=999;stale['marc']['fields'].append(field('080',value='777'))
     assert client.put('/api/records/'+str(saved.json()['id']),json=stale).status_code==409
     assert len(client.get(f'/api/types/{t}/vocabulary').json())==1
 
-def test_vocabulary_transaction_rolls_back_auto_when_other_list_rejects(client):
+def test_manual_vocabulary_value_warns_without_adding_it_to_controlled_list(client):
     t=client.post('/api/types',json={'name':'Два справочника','config':[{'tag':'080','vocabularies':{'a':{'auto_add':True}}},{'tag':'260','vocabularies':{'b':{'auto_add':False}}}]}).json()['id']
     p=payload(t);p['marc']['fields'] += [field('080',value='new'),field('260','b','unknown')]
-    assert client.post('/api/records',json=p).status_code==422
-    assert client.get(f'/api/types/{t}/vocabulary').json()==[]
-    assert client.get('/api/records',params={'type_id':t}).json()==[]
+    saved=client.post('/api/records',json=p)
+    assert saved.status_code==201,saved.text
+    assert saved.json()['marc']==p['marc']
+    assert any('260$b:' in w for w in saved.json()['warnings'])
+    entries=client.get(f'/api/types/{t}/vocabulary').json()
+    assert [(e['tag'],e['value']) for e in entries]==[('080','new')]
+    assert len(client.get('/api/records',params={'type_id':t}).json())==1
 
 def test_vocabulary_config_guards(client):
     for tag,code in [('005','_'),('080','Z')]:
@@ -202,7 +218,10 @@ def test_vocabulary_edit_selected_without_changing_dictionary(client):
     assert [x['value'] for x in client.get(f'/api/types/{t}/vocabulary').json()]==['3']
     config['config'][1]['vocabularies']['a']['allow_edit']=False
     assert client.put(f'/api/types/{t}',json={k:config[k] for k in ('name','config')}).status_code==200
-    p.pop('version');assert client.post('/api/records',json=p).status_code==422
+    p.pop('version')
+    manual=client.post('/api/records',json=p)
+    assert manual.status_code==201,manual.text
+    assert any('080$a:' in w for w in manual.json()['warnings'])
     config['config'][1]['vocabularies']['a'].update(allow_edit=True,auto_add=True)
     client.put(f'/api/types/{t}',json={k:config[k] for k in ('name','config')})
     assert client.post('/api/records',json=p).status_code==201
@@ -210,167 +229,110 @@ def test_vocabulary_edit_selected_without_changing_dictionary(client):
 
 
 @pytest.mark.parametrize('local',[False,True])
-def test_edit_imported_blank_title_indicators_preserves_source(client,local):
+@pytest.mark.parametrize('tag',['100','245','440','650','700'])
+def test_edit_imported_description_preserves_source_and_warns(client,local,tag):
     config=[{'tag':'245','required':True,'local':local}]
+    if tag!='245': config.append({'tag':tag,'local':local})
     type_id=client.post('/api/types',json={'name':'Legacy','config':config}).json()['id']
-    item='245  \x1faСтарое заглавие\x1fbПродолжение'
+    item='245  \x1faСтарое заглавие'
+    if tag!='245': item+=f'\x1e{tag}  \x1faИсходное значение'
     imported=client.post('/api/import/marcsql',json={
         'source':'regression','doc_id':1,'type_id':type_id,
-        'rectype':'a','biblevel':'m','item':item,'preview':False,
-    })
-    assert imported.status_code==200,imported.text
-    record_id=imported.json()['record_id']
-    saved=client.get(f'/api/records/{record_id}').json()
-    body={k:saved[k] for k in ('type_id','version','marc')}
-    title=next(f for f in body['marc']['fields'] if f['tag']=='245')
-    title['subfields'][0]['value']='Уточнённое заглавие'
-    updated=client.put(f'/api/records/{record_id}',json=body)
-    assert updated.status_code==200,updated.text
-    result=updated.json()
-    assert result['marc']==body['marc']
-    assert len([w for w in result['warnings'] if 'пустой индикатор' in w])==2
-    assert client.get(f'/api/records/{record_id}/marcsql-source').json()['item']==item
-    # Correction is allowed; subsequent saves cannot restore invalid blanks.
-    body['version']=result['version']
-    title['ind1']='0';title['ind2']='0'
-    corrected=client.put(f'/api/records/{record_id}',json=body)
-    assert corrected.status_code==200,corrected.text
-    body['version']=corrected.json()['version']
-    title['ind1']=' ';title['ind2']=' '
-    assert client.put(f'/api/records/{record_id}',json=body).status_code==422
-
-
-@pytest.mark.parametrize('ind1,ind2',[(' ',' '),('9','0'),('0','x')])
-def test_new_title_indicators_remain_strict(client,ind1,ind2):
-    body=payload(make_type(client))
-    body['marc']['fields'][0].update(ind1=ind1,ind2=ind2)
-    assert client.post('/api/records',json=body).status_code==422
-
-
-def test_legacy_blank_exception_is_position_specific():
-    original=payload(1)['marc']
-    original['fields'][0]['ind1']=' '
-    modified=copy.deepcopy(original)
-    modified['fields'][0].update(ind1='0',ind2=' ')
-    errors,_=validate_marc(modified,[],DICTIONARY,previous=original)
-    assert errors==["245: invalid indicator 2: ' '"]
-
-
-@pytest.mark.parametrize('local',[False,True])
-def test_edit_imported_blank_series_indicator_preserves_source(client,local):
-    config=[{'tag':'245','required':True,'local':local}, {'tag':'440','local':local}]
-    type_id=client.post('/api/types',json={'name':'Legacy series','config':config}).json()['id']
-    item='24510\x1faСтарое заглавие\x1e440  \x1faУчебная серия\x1fv3'
-    imported=client.post('/api/import/marcsql',json={
-        'source':'regression-series','doc_id':1,'type_id':type_id,
-        'rectype':'a','biblevel':'m','item':item,'preview':False,
-    })
-    assert imported.status_code==200,imported.text
-    record_id=imported.json()['record_id']
-    endpoint=f'/api/records/{record_id}'
-    saved=client.get(endpoint).json()
-    body={k:saved[k] for k in ('type_id','version','marc')}
-    next(f for f in body['marc']['fields'] if f['tag']=='245')['subfields'][0]['value']='Уточнённое заглавие'
-    series=next(f for f in body['marc']['fields'] if f['tag']=='440')
-    assert series['ind2']==' '
-    updated=client.put(endpoint,json=body)
-    assert updated.status_code==200,updated.text
-    result=updated.json()
-    assert result['marc']==body['marc']
-    assert any(w.startswith('440:') and 'пустой индикатор 2' in w for w in result['warnings'])
-    assert client.get(endpoint+'/marcsql-source').json()['item']==item
-    body['version']=result['version']
-    # A saved legacy blank does not authorize another invalid occurrence.
-    duplicate=copy.deepcopy(body)
-    duplicate['marc']['fields'].append(copy.deepcopy(series))
-    assert client.put(endpoint,json=duplicate).status_code==422
-    # Explicit correction is retained, including a nonzero value.
-    series['ind2']='4'
-    corrected=client.put(endpoint,json=body)
-    assert corrected.status_code==200,corrected.text
-    assert next(f for f in corrected.json()['marc']['fields'] if f['tag']=='440')['ind2']=='4'
-    body['version']=corrected.json()['version']
-    series['ind2']=' '
-    assert client.put(endpoint,json=body).status_code==422
-
-
-@pytest.mark.parametrize('ind1,ind2',[(' ',' '),(' ','x'),('1','0')])
-def test_new_series_indicators_remain_strict(client,ind1,ind2):
-    body=payload(make_type(client))
-    series=field('440',value='Новая серия')
-    series.update(ind1=ind1,ind2=ind2)
-    body['marc']['fields'].append(series)
-    assert client.post('/api/records',json=body).status_code==422
-
-
-def test_legacy_blank_allowance_does_not_cross_fields_or_positions():
-    original=payload(1)['marc']
-    original['fields'].append(field('440',value='Серия'))
-    modified=copy.deepcopy(original)
-    modified['fields'][0]['ind2']=' '
-    modified['fields'][1]['ind2']='0'
-    assert validate_marc(modified,[],DICTIONARY,previous=original)[0]==["245: invalid indicator 2: ' '"]
-    # The valid blank first indicator of 440 cannot authorize a new blank second indicator.
-    original['fields'][1]['ind2']='0'
-    modified=copy.deepcopy(original)
-    modified['fields'][1]['ind2']=' '
-    assert validate_marc(modified,[],DICTIONARY,previous=original)[0]==["440: invalid indicator 2: ' '"]
-
-
-@pytest.mark.parametrize('local',[False,True])
-def test_edit_imported_blank_subject_indicator_preserves_source(client,local):
-    config=[{'tag':'245','required':True,'local':local}, {'tag':'650','local':local}]
-    type_id=client.post('/api/types',json={'name':'Legacy subjects','config':config}).json()['id']
-    item='245  \x1faКурс английского языка для финансистов\x1e650  \x1faАнглийский язык'
-    imported=client.post('/api/import/marcsql',json={
-        'source':'regression-subject','doc_id':1,'type_id':type_id,
         'rectype':'a','biblevel':'m','item':item,'preview':False,
     })
     assert imported.status_code==200,imported.text
     endpoint=f"/api/records/{imported.json()['record_id']}"
     saved=client.get(endpoint).json()
     body={k:saved[k] for k in ('type_id','version','marc')}
-    next(f for f in body['marc']['fields'] if f['tag']=='245')['subfields'].append({'code':'b','value':'Учебник'})
-    subject=next(f for f in body['marc']['fields'] if f['tag']=='650')
+    next(f for f in body['marc']['fields'] if f['tag']=='245')['subfields'][0]['value']='Уточнённое заглавие'
     updated=client.put(endpoint,json=body)
     assert updated.status_code==200,updated.text
     result=updated.json()
     assert result['marc']==body['marc']
-    assert any(w.startswith('650:') and 'пустой индикатор 2' in w for w in result['warnings'])
+    assert any(w.startswith(tag+':') and ('индикатор' in w or 'indicator' in w) for w in result['warnings'])
     assert client.get(endpoint+'/marcsql-source').json()['item']==item
-    body['version']=result['version']
-    # Repeating a legacy blank does not grant a new invalid occurrence.
-    duplicate=copy.deepcopy(body)
-    duplicate['marc']['fields'].append(copy.deepcopy(subject))
-    assert client.put(endpoint,json=duplicate).status_code==422
-    # Other invalid values still fail, including on an existing legacy field.
-    invalid=copy.deepcopy(body)
-    next(f for f in invalid['marc']['fields'] if f['tag']=='650')['ind2']='x'
-    assert client.put(endpoint,json=invalid).status_code==422
-    subject['ind2']='4'
-    corrected=client.put(endpoint,json=body)
-    assert corrected.status_code==200,corrected.text
-    assert next(f for f in corrected.json()['marc']['fields'] if f['tag']=='650')['ind2']=='4'
-    body['version']=corrected.json()['version']
-    subject['ind2']=' '
-    # A valid first-indicator blank cannot restore a corrected second indicator.
-    assert client.put(endpoint,json=body).status_code==422
 
 
-@pytest.mark.parametrize('ind1,ind2',[(' ',' '),(' ','x'),('9','4')])
-def test_new_subject_indicators_remain_strict(client,ind1,ind2):
+@pytest.mark.parametrize('tag,ind1,ind2',[
+    ('100',' ',' '),('245',' ',' '),('245','9','x'),
+    ('440','1','x'),('650',' ',' '),('650','9','x'),('700','x',' '),
+])
+def test_nonstandard_description_indicators_save_as_warnings(client,tag,ind1,ind2):
     body=payload(make_type(client))
-    subject=field('650',value='Английский язык')
-    subject.update(ind1=ind1,ind2=ind2)
-    body['marc']['fields'].append(subject)
-    assert client.post('/api/records',json=body).status_code==422
+    if tag=='245': target=body['marc']['fields'][0]
+    else:
+        target=field(tag,value='Исходное значение')
+        body['marc']['fields'].append(target)
+    target.update(ind1=ind1,ind2=ind2)
+    created=client.post('/api/records',json=body)
+    assert created.status_code==201,created.text
+    assert created.json()['marc']==body['marc']
+    assert any(w.startswith(tag+':') and 'invalid indicator' in w for w in created.json()['warnings'])
+    endpoint=f"/api/records/{created.json()['id']}"
+    body['version']=created.json()['version']
+    target['ind1']='z'
+    updated=client.put(endpoint,json=body)
+    assert updated.status_code==200,updated.text
+    assert updated.json()['marc']==body['marc']
+    assert any(w.startswith(tag+':') and 'invalid indicator 1' in w for w in updated.json()['warnings'])
 
 
-def test_legacy_subject_blank_allowance_does_not_cross_tags_and_allows_reordering():
-    original=payload(1)['marc']
-    original['fields'] += [field('650',value='Английский язык'),field('650',value='Финансы')]
-    modified=copy.deepcopy(original)
-    modified['fields'].reverse()
-    assert validate_marc(modified,[],DICTIONARY,previous=original)[0]==[]
-    modified['fields'].append(field('440',value='Серия'))
-    assert validate_marc(modified,[],DICTIONARY,previous=original)[0]==["440: invalid indicator 2: ' '"]
+@pytest.mark.parametrize('change',[
+    lambda m:m.update(leader='short'),
+    lambda m:m.update(leader='я'*24),
+    lambda m:m['fields'][0].update(ind1=''),
+    lambda m:m['fields'][0].update(ind1='12'),
+    lambda m:m['fields'][0].update(ind1='я'),
+    lambda m:m['fields'][0].update(ind1=None),
+    lambda m:m['fields'][0].update(value='wrong structure'),
+    lambda m:m['fields'][0].update(subfields=None),
+    lambda m:m['fields'].append({'tag':'008','value':'short'}),
+    lambda m:m['fields'].append({'tag':'006','value':'short'}),
+    lambda m:m['fields'].append({'tag':'001','value':'id','ind1':' '}),
+    lambda m:m['fields'].append({'tag':'000','value':'not a field'}),
+    lambda m:m['fields'].append({'tag':'bad','value':'not a tag'}),
+])
+def test_structural_errors_still_block_without_changing_record(client,change):
+    saved=client.post('/api/records',json=payload(make_type(client))).json()
+    endpoint=f"/api/records/{saved['id']}"
+    body=copy.deepcopy({k:saved[k] for k in ('type_id','version','marc')})
+    change(body['marc'])
+    rejected=client.put(endpoint,json=body)
+    assert rejected.status_code==422,rejected.text
+    unchanged=client.get(endpoint).json()
+    assert unchanged['version']==saved['version']
+    assert unchanged['marc']==saved['marc']
+
+
+@pytest.mark.parametrize('tag,code',[('001',None),('005',None),('008',None),('990',None),('990','d')])
+def test_automatic_field_duplicates_still_block(client,tag,code):
+    from app.worksheet import default_config
+    t=client.post('/api/types',json={'name':'Служебные поля','config':default_config()}).json()
+    saved=client.post('/api/records',json=payload(t['id'])).json()
+    body=copy.deepcopy({k:saved[k] for k in ('type_id','version','marc')})
+    target=next(f for f in body['marc']['fields'] if f['tag']==tag)
+    if code:
+        target['subfields'].append(copy.deepcopy(next(s for s in target['subfields'] if s['code']==code)))
+    else:
+        body['marc']['fields'].append(copy.deepcopy(target))
+    rejected=client.put(f"/api/records/{saved['id']}",json=body)
+    assert rejected.status_code==422,rejected.text
+    assert 'not repeatable' in str(rejected.json()['detail'])
+
+
+def test_fixed_width_description_codes_warn_without_rewriting(client):
+    body=payload(make_type(client))
+    value='261120sabcd    kz '+'|'*17+'RUS'+'||'
+    assert len(value)==40
+    body['marc']['fields'].append({'tag':'008','value':value})
+    created=client.post('/api/records',json=body)
+    assert created.status_code==201,created.text
+    assert created.json()['marc']==body['marc']
+    assert any('первая дата' in w for w in created.json()['warnings'])
+    assert any('язык' in w for w in created.json()['warnings'])
+    body['version']=created.json()['version']
+    body['marc']['fields'][-1]['value']=value[:35]+'KAZ'+value[38:]
+    updated=client.put(f"/api/records/{created.json()['id']}",json=body)
+    assert updated.status_code==200,updated.text
+    assert updated.json()['marc']==body['marc']
+    assert any('язык' in w for w in updated.json()['warnings'])

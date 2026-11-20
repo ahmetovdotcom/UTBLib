@@ -189,8 +189,8 @@ def save_record(body,s,id=None,user=None):
     meaningful=creating or previous_type!=t.id or comparable(marc)!=comparable(previous_marc) or selected!=primary(previous_marc,previous.primary_specialty)
     # 097$b belongs to the description; record_activity records the actual editor.
     effective={**DICTIONARY,**{c['tag']:LOCAL_DICTIONARY[c['tag']] for c in t.config if c.get('local') and c['tag'] in LOCAL_DICTIONARY}}
-    errors,warnings=validate_marc(marc,t.config,effective,previous=previous_marc)
-    errors+=validate_coded(marc,previous.marc if previous else None)
+    errors,warnings=validate_marc(marc,t.config,effective,previous=previous_marc,descriptive_warnings=True)
+    warnings+=validate_coded(marc,previous_marc)
     if errors: raise HTTPException(422,errors)
     if id:
         if body.version is None: raise HTTPException(422,'Version required')
@@ -200,7 +200,9 @@ def save_record(body,s,id=None,user=None):
         r=Record(type_id=t.id,marc=marc,search_text=search_text(marc),primary_specialty=selected); s.add(r); s.flush(); id=r.id
     from .catalog_files import save_publication
     meaningful=save_publication(s,s.get(Record,id),body,user) or meaningful
-    vocab_errors,vocab_warnings=apply_vocabularies(s,t,marc,previous_marc)
+    # Description quality must not prevent saving. Preserve manual values without
+    # adding them to a controlled vocabulary unless auto_add is enabled.
+    vocab_errors,vocab_warnings=apply_vocabularies(s,t,marc,previous_marc,descriptive_warnings=True)
     if vocab_errors:
         s.rollback(); raise HTTPException(422,vocab_errors)
     warnings+=vocab_warnings

@@ -22,7 +22,7 @@ def add_entry(s,type_id,tag,code,value,label=''):
 def values(marc,tag,code):
     return [v for f in (marc or {}).get('fields',[]) if f['tag']==tag for v in ([f.get('value','')] if code=='_' else [s['value'] for s in f.get('subfields',[]) if s['code']==code]) if v.strip()]
 
-def apply_vocabularies(s,t,marc,previous=None):
+def apply_vocabularies(s,t,marc,previous=None,*,descriptive_warnings=False):
     errors=[];warnings=[]
     for config in t.config:
         tag=config['tag']
@@ -37,7 +37,11 @@ def apply_vocabularies(s,t,marc,previous=None):
                     if len(normalized(value))>1000:
                         warnings.append(f'{tag}${code}: значение сохранено в записи, но слишком длинное для справочника (максимум 1000 символов)');continue
                     add_entry(s,t.id,tag,code,value);known.add(key)
-                elif not settings.get('allow_edit') and key not in prior: errors.append(f'{tag}${code}: выберите значение из справочника или разрешите ручное редактирование / автопополнение в настройках ввода')
+                elif not settings.get('allow_edit') and key not in prior:
+                    if descriptive_warnings:
+                        warnings.append(f'{tag}${code}: значение отсутствует в справочнике; сохранено только в записи')
+                    else:
+                        errors.append(f'{tag}${code}: выберите значение из справочника или разрешите ручное редактирование / автопополнение в настройках ввода')
     return errors,warnings
 
 

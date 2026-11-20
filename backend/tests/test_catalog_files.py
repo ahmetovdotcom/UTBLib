@@ -106,10 +106,10 @@ def test_upload_validation_csrf_permissions_and_record_conflict(client):
 
 def test_foreign_upload_and_failed_save_do_not_publish(client):
     token=upload(client);body=payload(make_type(client));body.update(digital_upload=token,is_faculty_work=True,use_first_page_cover=True)
-    body['marc']['fields']=[]
+    body['marc']['leader']='broken structure'
     assert client.post('/api/records',json=body).status_code==422
     with session() as s: assert s.get(CatalogFile,token).record_id is None
-    body['marc']['fields']=[field()]
+    body['marc']['leader']=payload(body['type_id'])['marc']['leader']
     with session() as s:
         s.get(CatalogFile,token).owner_id=9999;s.commit()
     response=client.post('/api/records',json=body)

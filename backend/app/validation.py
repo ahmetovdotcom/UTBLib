@@ -18,8 +18,11 @@ def validate_config(config, dictionary, local_dictionary=None):
     if len(tags)!=len(set(tags)): errors.append('Duplicate profile fields')
     return errors
 
-def validate_marc(marc, config, dictionary, previous=None):
+def validate_marc(marc, config, dictionary, previous=None, *, descriptive_warnings=False):
+    """Keep structural errors blocking; optionally report description rules as warnings."""
     errors=[]; warnings=[]
+    description_issues=warnings if descriptive_warnings else errors
+    profiles={c['tag']:c for c in config}
     dictionary={**dictionary, **{c['tag']:configured_spec(dictionary[c['tag']], c)
                                 for c in config if c['tag'] in dictionary}}
     old_fields=(previous or {}).get('fields', [])
@@ -36,7 +39,7 @@ def validate_marc(marc, config, dictionary, previous=None):
     for c in config:
         if c['tag']=='000': continue
         if c['required'] and not any(f['tag']==c['tag'] and (f.get('value','').strip() or any(s['value'].strip() for s in f.get('subfields',[]))) for f in fields):
-            errors.append(f"{c['tag']}: required by document type")
+            description_issues.append(f"{c['tag']}: required by document type")
     for f in fields:
         tag=f['tag']; spec=dictionary.get(tag)
         if tag=='000': errors.append('000: маркер хранится в leader, а не в массиве fields'); continue
@@ -44,9 +47,11 @@ def validate_marc(marc, config, dictionary, previous=None):
             warnings.append(f'{tag}: unknown/local field preserved')
         elif not spec['repeatable'] and counts[tag]>1:
             if counts[tag]>max(1, old_counts[tag]):
-                errors.append(f'{tag}: not repeatable')
+                target=errors if locked(tag,local=profiles.get(tag,{}).get('local',False)) else description_issues
+                target.append(f'{tag}: not repeatable')
             else:
-                warnings.append(f'{tag}: сохранены прежние повторения; добавление новых отключено')
+                suffix='сохранены повторения, не предусмотренные шаблоном' if descriptive_warnings else 'сохранены прежние повторения; добавление новых отключено'
+                warnings.append(f'{tag}: {suffix}')
         if spec and spec['obsolete']: warnings.append(f'{tag}: obsolete')
         if int(tag)<10:
             if f.get('value') is None or f.get('subfields') or f.get('ind1') is not None or f.get('ind2') is not None: errors.append(f'{tag}: control field must have only value')
@@ -63,7 +68,7 @@ def validate_marc(marc, config, dictionary, previous=None):
                     legacy_blanks[tag,pos]-=1
                     warnings.append(f'{tag}: сохранён пустой индикатор {pos} из прежней записи; его можно уточнить в настройках поля «Индикаторы»')
                 else:
-                    errors.append(f'{tag}: invalid indicator {pos}: {v!r}')
+                    description_issues.append(f'{tag}: invalid indicator {pos}: {v!r}')
         subs=f.get('subfields') or []; sc=Counter(s['code'] for s in subs)
         for s in subs:
             definition=next((x for x in (spec or {}).get('subfields',[]) if x['code']==s['code']),None)
@@ -80,9 +85,11 @@ def validate_marc(marc, config, dictionary, previous=None):
                     repeat_checks[key]=any(n>max(1, before[i] if i<len(before) else 1)
                                            for i,n in enumerate(after))
                 if repeat_checks[key]:
-                    errors.append(f'{tag}${code}: not repeatable')
+                    target=errors if locked(tag,code,profiles.get(tag,{}).get('local',False)) else description_issues
+                    target.append(f'{tag}${code}: not repeatable')
                 else:
-                    warnings.append(f'{tag}${code}: сохранены прежние повторения; добавление новых отключено')
+                    suffix='сохранены повторения, не предусмотренные шаблоном' if descriptive_warnings else 'сохранены прежние повторения; добавление новых отключено'
+                    warnings.append(f'{tag}${code}: {suffix}')
             if spec and not definition: warnings.append(f"{tag}${s['code']}: unknown subfield preserved")
     return sorted(set(errors)), sorted(set(warnings))
 
