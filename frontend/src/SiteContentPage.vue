@@ -78,8 +78,9 @@ useNavigationGuard('site',()=>!!editor.value&&!cleanEditor.value,()=>busy.value)
   <label v-if="kind==='events'">Место проведения<input v-model="text.venue" maxlength="500"></label>
   <div v-if="kind==='resources'" class="site-grid">
    <label>Ссылка на ресурс<input type="url" v-model="editor.data.url" maxlength="2000"></label><label>Поставщик / организация<input v-model="editor.data.provider" maxlength="300"></label>
-   <label>Тип ресурса<select v-model="editor.data.resource_type"><option value="open_access">Открытый</option><option value="licensed">Лицензионный</option><option value="partner">Партнёрский</option><option value="internal">Внутренний</option></select></label>
+   <label>Тип ресурса<select v-model="editor.data.resource_type"><option value="open_access">Открытый</option><option value="licensed">Лицензионный</option><option value="partner">Межбиблиотечное сотрудничество</option><option value="internal">Внутренний</option></select></label>
    <label>Доступ<select v-model="editor.data.access_type"><option value="open">Для всех</option><option value="campus">В сети университета</option><option value="remote_auth">После входа на сайт</option></select></label>
+   <label>Порядок отображения<input type="number" v-model.number="editor.data.sort_order" min="0" max="99999"><small>Меньшее число отображается раньше.</small></label>
    <label>Доступ действует до<input type="date" v-model="editor.data.expires_on"></label>
    <label>Категория<select v-model="editor.data.category"><option value="">Не указана</option><option value="research_database">Научная база</option><option value="electronic_library">Электронная библиотека</option><option value="open_access">Открытый доступ</option><option value="analytics">Аналитика и СМИ</option></select></label>
   </div>

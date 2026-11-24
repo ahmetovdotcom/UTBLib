@@ -1,0 +1,219 @@
+[
+  {
+    "slug": "cooperation-librarian",
+    "kind": "resources",
+    "status": "published",
+    "data": {
+      "resource_type": "partner",
+      "access_type": "open",
+      "url": "https://librarian.kz/",
+      "provider": "Ассоциация библиотек вузов Республики Казахстан",
+      "sort_order": 1,
+      "translations": {
+        "ru": {
+          "title": "Ассоциация библиотек вузов Республики Казахстан",
+          "description": "Официальный сайт организации — участника межбиблиотечного сотрудничества.",
+          "image_alt": "Ассоциация библиотек вузов Республики Казахстан"
+        },
+        "kk": {
+          "title": "Қазақстан Республикасы жоғары оқу орындары кітапханаларының қауымдастығы",
+          "description": "Кітапханааралық ынтымақтастыққа қатысушы ұйымның ресми сайты.",
+          "image_alt": "Қазақстан Республикасы жоғары оқу орындары кітапханаларының қауымдастығы"
+        },
+        "en": {
+          "title": "Association of University Libraries of Kazakhstan",
+          "description": "Official website of an interlibrary cooperation partner.",
+          "image_alt": "Association of University Libraries of Kazakhstan"
+        }
+      }
+    },
+    "image": "librarian.png",
+    "logo_source": "https://librarian.kz/wp-content/uploads/2026/06/logo-ru.png"
+  },
+  {
+    "slug": "cooperation-rntb",
+    "kind": "resources",
+    "status": "published",
+    "data": {
+      "resource_type": "partner",
+      "access_type": "open",
+      "url": "https://rntb.kz/ru/",
+      "provider": "Республиканская научно-техническая библиотека",
+      "sort_order": 2,
+      "translations": {
+        "ru": {
+          "title": "Республиканская научно-техническая библиотека",
+          "description": "Официальный сайт организации — участника межбиблиотечного сотрудничества.",
+          "image_alt": "Республиканская научно-техническая библиотека"
+        },
+        "kk": {
+          "title": "Республикалық ғылыми-техникалық кітапхана",
+          "description": "Кітапханааралық ынтымақтастыққа қатысушы ұйымның ресми сайты.",
+          "image_alt": "Республикалық ғылыми-техникалық кітапхана"
+        },
+        "en": {
+          "title": "Republican Scientific and Technical Library",
+          "description": "Official website of an interlibrary cooperation partner.",
+          "image_alt": "Republican Scientific and Technical Library"
+        }
+      }
+    },
+    "image": "rntb.png",
+    "logo_source": "https://rntb.kz/wp-content/themes/rntb/source/assets/img/logo-new.svg"
+  },
+  {
+    "slug": "cooperation-atu",
+    "kind": "resources",
+    "status": "published",
+    "data": {
+      "resource_type": "partner",
+      "access_type": "open",
+      "url": "https://atu.edu.kz/kk/",
+      "provider": "Алматинский технологический университет",
+      "sort_order": 3,
+      "translations": {
+        "ru": {
+          "title": "Алматинский технологический университет",
+          "description": "Официальный сайт организации — участника межбиблиотечного сотрудничества.",
+          "image_alt": "Алматинский технологический университет"
+        },
+        "kk": {
+          "title": "Алматы Технологиялық университеті АТУ",
+          "description": "Кітапханааралық ынтымақтастыққа қатысушы ұйымның ресми сайты.",
+          "image_alt": "Алматы Технологиялық университеті АТУ"
+        },
+        "en": {
+          "title": "Almaty Technological University",
+          "description": "Official website of an interlibrary cooperation partner.",
+          "image_alt": "Almaty Technological University"
+        }
+      }
+    },
+    "image": "atu.png",
+    "logo_source": "https://atu.edu.kz/templates/release/images/logo.svg"
+  },
+  {
+    "slug": "cooperation-kozybayev",
+    "kind": "resources",
+    "status": "published",
+    "data": {
+      "resource_type": "partner",
+      "access_type": "open",
+      "url": "https://ku.edu.kz/kk/",
+      "provider": "Северо-Казахстанский университет имени М. Козыбаева",
+      "sort_order": 4,
+      "translations": {
+        "ru": {
+          "title": "Северо-Казахстанский университет имени М. Козыбаева",
+          "description": "Официальный сайт организации — участника межбиблиотечного сотрудничества.",
+          "image_alt": "Северо-Казахстанский университет имени М. Козыбаева"
+        },
+        "kk": {
+          "title": "М.Қозыбаев атындағы Солтүстік Қазақстан университеті",
+          "description": "Кітапханааралық ынтымақтастыққа қатысушы ұйымның ресми сайты.",
+          "image_alt": "М.Қозыбаев атындағы Солтүстік Қазақстан университеті"
+        },
+        "en": {
+          "title": "M. Kozybayev North Kazakhstan University",
+          "description": "Official website of an interlibrary cooperation partner.",
+          "image_alt": "M. Kozybayev North Kazakhstan University"
+        }
+      }
+    },
+    "image": "kozybayev.png",
+    "logo_source": "https://ku.edu.kz/images/logo/logo-new.svg"
+  },
+  {
+    "slug": "cooperation-astana-cbs",
+    "kind": "resources",
+    "status": "published",
+    "data": {
+      "resource_type": "partner",
+      "access_type": "open",
+      "url": "https://astana-library.kz/management",
+      "provider": "Централизованная библиотечная система акимата города Астаны",
+      "sort_order": 5,
+      "translations": {
+        "ru": {
+          "title": "Централизованная библиотечная система акимата города Астаны",
+          "description": "Межбиблиотечное сотрудничество по договору с КГУ «Централизованная библиотечная система» акимата города Астаны.",
+          "image_alt": "Централизованная библиотечная система акимата города Астаны"
+        },
+        "kk": {
+          "title": "Астана қаласы әкімдігінің «Орталықтандырылған кітапханалар жүйесі» КММ",
+          "description": "Астана қаласы әкімдігінің «Орталықтандырылған кітапханалар жүйесі» КММ-сімен кітапханааралық келісім-шарт.",
+          "image_alt": "Астана қаласы әкімдігінің «Орталықтандырылған кітапханалар жүйесі» КММ"
+        },
+        "en": {
+          "title": "Centralized Library System of Astana",
+          "description": "Official website of an interlibrary cooperation partner.",
+          "image_alt": "Centralized Library System of Astana"
+        }
+      }
+    },
+    "image": "astana-cbs.png",
+    "logo_source": "https://astana-library.kz/themes/demo/assets/images/site/header/header_logo.svg"
+  },
+  {
+    "slug": "cooperation-enu",
+    "kind": "resources",
+    "status": "published",
+    "data": {
+      "resource_type": "partner",
+      "access_type": "open",
+      "url": "https://enu.kz/kz",
+      "provider": "Евразийский национальный университет имени Л.Н. Гумилева",
+      "sort_order": 6,
+      "translations": {
+        "ru": {
+          "title": "Евразийский национальный университет имени Л.Н. Гумилева",
+          "description": "Официальный сайт организации — участника межбиблиотечного сотрудничества.",
+          "image_alt": "Евразийский национальный университет имени Л.Н. Гумилева"
+        },
+        "kk": {
+          "title": "Л.Н.Гумилев атындағы Еуразия ұлттық университеті",
+          "description": "Кітапханааралық ынтымақтастыққа қатысушы ұйымның ресми сайты.",
+          "image_alt": "Л.Н.Гумилев атындағы Еуразия ұлттық университеті"
+        },
+        "en": {
+          "title": "L.N. Gumilyov Eurasian National University",
+          "description": "Official website of an interlibrary cooperation partner.",
+          "image_alt": "L.N. Gumilyov Eurasian National University"
+        }
+      }
+    },
+    "image": "enu.png",
+    "logo_source": "https://enu.kz/_nuxt/light_blue_logo.D5pL9LgZ.svg"
+  },
+  {
+    "slug": "cooperation-cardiff",
+    "kind": "resources",
+    "status": "published",
+    "data": {
+      "resource_type": "partner",
+      "access_type": "open",
+      "url": "https://cardiff.edu.kz",
+      "provider": "Cardiff University Kazakhstan",
+      "sort_order": 7,
+      "translations": {
+        "ru": {
+          "title": "Cardiff University Kazakhstan",
+          "description": "Официальный сайт организации — участника межбиблиотечного сотрудничества.",
+          "image_alt": "Cardiff University Kazakhstan"
+        },
+        "kk": {
+          "title": "Cardiff University Kazakhstan",
+          "description": "Кітапханааралық ынтымақтастыққа қатысушы ұйымның ресми сайты.",
+          "image_alt": "Cardiff University Kazakhstan"
+        },
+        "en": {
+          "title": "Cardiff University Kazakhstan",
+          "description": "Official website of an interlibrary cooperation partner.",
+          "image_alt": "Cardiff University Kazakhstan"
+        }
+      }
+    },
+    "image": "cardiff.png",
+    "logo_source": "https://media.cardiff.ac.uk/cdn-cgi/image/format=auto,q=85,w=800/https://media.cardiff.ac.uk/image/https://cardiff.ac.uk/__data/assets/image/0019/3107215/logo-cardiff-kaz.png"
+  }
+]

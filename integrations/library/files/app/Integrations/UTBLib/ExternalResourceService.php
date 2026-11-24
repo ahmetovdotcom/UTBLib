@@ -11,7 +11,7 @@ class ExternalResourceService extends \App\Services\ExternalResourceService
 
     public function directory(array $filters = []): Collection
     {
-        $rows = $this->content->all('resources')->map(fn ($r) => $this->present($r));
+        $rows = $this->content->all('resources')->sortBy(fn ($r) => $r['data']['sort_order'] ?? 0)->map(fn ($r) => $this->present($r));
         foreach (['category', 'access_type', 'resource_type', 'status'] as $field) {
             if (! empty($filters[$field])) $rows = $rows->where($field, $filters[$field]);
         }
